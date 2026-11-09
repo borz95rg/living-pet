@@ -2,7 +2,7 @@
   'use strict';
 
   const SAVE_KEY = 'livingPetSave';
-  const SAVE_VERSION = 3;
+  const SAVE_VERSION = 4;
   const MAX_OFFLINE_MS = 14 * 24 * 60 * 60 * 1000;
   const STEP_MS = 15 * 60 * 1000;
   const names = { fox: 'Искра', wolf: 'Туман', cat: 'Плюша', dog: 'Бублик' };
@@ -27,6 +27,32 @@
     { id: 'moon-stone', icon: '🌙', name: 'Лунный камешек', hint: 'Находится там, где вечером лежит светлая полоса.' },
     { id: 'marked-leaf', icon: '🍃', name: 'Лист с картой', hint: 'Прожилки складываются в знакомый узор долины.' },
   ];
+  const expeditions = [
+    {
+      title: 'Огоньки старой тропы',
+      story: 'В сумерках вы заметили цепочку мягких огоньков. Один из них застрял в траве, а остальные словно ждут, пока вы решите, что делать.',
+      choices: [
+        { id: 'keep', label: 'Сохранить огонёк дома', result: 'Ты оставил стеклянный огонёк у себя. Теперь он напоминает о вечерней тропе.', souvenir: 'Стеклянный огонёк', mood: 5, affection: 2 },
+        { id: 'return', label: 'Отпустить его к остальным', result: 'Ты отпустил огонёк, и цепочка снова повела светлячков к их поляне.', berries: 2, mood: 9 },
+      ],
+    },
+    {
+      title: 'Звон под старым мостом',
+      story: 'Из-под моста доносится тихий звон. Там лежит маленький талисман, а рядом видны следы, ведущие обратно в долину.',
+      choices: [
+        { id: 'keep', label: 'Взять талисман на память', result: 'Ты забрал талисман. Лисица обещала хранить его в своём уголке.', souvenir: 'Талисман старого моста', affection: 3, mood: 4 },
+        { id: 'return', label: 'Вернуть его на тропу', result: 'Ты оставил талисман у знакомой тропы. Вскоре звон ответил издалека.', berries: 1, mood: 8 },
+      ],
+    },
+    {
+      title: 'Гнездо под большим листом',
+      story: 'После ветра вы нашли пустое гнёздышко. Оно цело, но ему нужна крыша, чтобы пережить следующую непогоду.',
+      choices: [
+        { id: 'keep', label: 'Забрать перо на память', result: 'Ты сохранил найденное перо. Оно стало первым сувениром вашей экспедиции.', souvenir: 'Перо долины', mood: 4, affection: 2 },
+        { id: 'return', label: 'Укрыть гнездо листьями', result: 'Ты укрыл гнездо. Утром рядом появились свежие следы — его хозяин вернулся.', berries: 2, mood: 7 },
+      ],
+    },
+  ];
   const $ = id => document.getElementById(id);
   const now = () => Date.now();
   let pet;
@@ -43,6 +69,7 @@
       inventory: { meat: 2, fish: 1, berries: 3, treat: 1, water: 2 },
       routine: { play: 0, talk: 0, explore: 0, feed: 0, autonomous: 0, sleep: 0 },
       discoveries: [], mysterySolved: false,
+      expeditionIndex: 0, pendingExpedition: false, expeditionLog: [], souvenirs: [],
       activity: 'idle', lastActivityAt: time, lastInteractionAt: time,
       lastSimAt: time, nextActionAt: time + 25 * 60 * 1000,
     };
@@ -67,6 +94,12 @@
       ? [...new Set(data.discoveries.filter(id => discoveries.some(item => item.id === id)))].slice(0, discoveries.length)
       : [];
     data.mysterySolved = Boolean(data.mysterySolved) || data.discoveries.length === discoveries.length;
+    data.expeditionIndex = Math.max(0, Math.floor(Number(data.expeditionIndex) || 0));
+    data.pendingExpedition = Boolean(data.pendingExpedition) && data.mysterySolved;
+    data.expeditionLog = Array.isArray(data.expeditionLog)
+      ? data.expeditionLog.filter(entry => entry && typeof entry === 'object').slice(0, 20)
+      : [];
+    data.souvenirs = Array.isArray(data.souvenirs) ? [...new Set(data.souvenirs.filter(item => typeof item === 'string'))].slice(0, 20) : [];
     data.activity = activityNames[data.activity] ? data.activity : 'idle';
     data.lastActivityAt = Number(data.lastActivityAt) || Number(data.updatedAt) || data.bornAt;
     data.lastInteractionAt = Number(data.lastInteractionAt) || data.bornAt;
@@ -82,7 +115,7 @@
       if (!raw) raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return null;
       const data = JSON.parse(raw);
-      if ([1, 2, SAVE_VERSION].includes(data.version)) return migrate(data);
+      if ([1, 2, 3, SAVE_VERSION].includes(data.version)) return migrate(data);
     } catch (_) { /* A damaged save never prevents starting a new game. */ }
     return null;
   }
@@ -265,7 +298,43 @@
       : pet.discoveries.length > 0
         ? `В коллекции уже ${pet.discoveries.length} из ${discoveries.length} загадочных находок.`
         : 'На поляне ещё ждут загадочные находки.';
-    return `${openings[pet.kind]} ${stageLine} ${habit} ${bond} ${clue} ${lastMoment}`;
+    const choice = pet.expeditionLog[0] ? `В последней экспедиции вы решили: ${pet.expeditionLog[0].result}` : '';
+    return `${openings[pet.kind]} ${stageLine} ${habit} ${bond} ${clue} ${choice} ${lastMoment}`;
+  }
+
+  function renderExpeditionOffer() {
+    const event = expeditions[pet.expeditionIndex % expeditions.length];
+    $('expeditionTitle').textContent = event.title;
+    $('expeditionText').textContent = event.story;
+    const choices = $('expeditionChoices');
+    choices.replaceChildren();
+    event.choices.forEach(choice => {
+      const button = document.createElement('button');
+      button.className = 'expeditionchoice';
+      button.textContent = choice.label;
+      button.onclick = () => chooseExpedition(event, choice);
+      choices.append(button);
+    });
+    $('expeditionDialog').hidden = false;
+  }
+
+  function chooseExpedition(event, choice) {
+    const time = now();
+    if (choice.souvenir && !pet.souvenirs.includes(choice.souvenir)) pet.souvenirs.push(choice.souvenir);
+    if (choice.berries) pet.inventory.berries = Math.min(99, pet.inventory.berries + choice.berries);
+    pet.needs.mood = clamp(pet.needs.mood + (choice.mood || 0));
+    pet.needs.affection = clamp(pet.needs.affection + (choice.affection || 0));
+    pet.expeditionLog.unshift({ date: new Date(time).toLocaleDateString('ru-RU'), event: event.title, choice: choice.label, result: choice.result });
+    pet.expeditionLog = pet.expeditionLog.slice(0, 20);
+    pet.expeditionIndex++;
+    pet.pendingExpedition = false;
+    pet.routine.expedition = (pet.routine.expedition || 0) + 1;
+    pet.lastInteractionAt = time;
+    pet.bubble = choice.souvenir ? 'буду беречь нашу находку ✨' : 'мы помогли долине 💛';
+    setActivity('explore', choice.result, time, true);
+    $('expeditionDialog').hidden = true;
+    show();
+    toast('Решение и его последствия сохранены');
   }
 
   function openJournal() {
@@ -301,6 +370,35 @@
     $('discoveryProgress').textContent = pet.mysterySolved
       ? 'Все находки собраны · тайна долины раскрыта'
       : `Находки ${pet.discoveries.length} из ${discoveries.length}`;
+    const souvenirs = $('souvenirList');
+    souvenirs.replaceChildren();
+    if (pet.souvenirs.length) {
+      pet.souvenirs.forEach(item => {
+        const row = document.createElement('li');
+        row.textContent = `✦ ${item}`;
+        souvenirs.append(row);
+      });
+    } else {
+      const row = document.createElement('li');
+      row.textContent = 'Памятные вещи появятся после первых экспедиций.';
+      souvenirs.append(row);
+    }
+    const expeditionRows = $('expeditionHistory');
+    expeditionRows.replaceChildren();
+    pet.expeditionLog.slice(0, 5).forEach(entry => {
+      const row = document.createElement('li');
+      const date = document.createElement('time');
+      const text = document.createElement('span');
+      date.textContent = entry.date;
+      text.textContent = `${entry.event}: ${entry.result}`;
+      row.append(date, text);
+      expeditionRows.append(row);
+    });
+    if (!pet.expeditionLog.length) {
+      const row = document.createElement('li');
+      row.textContent = 'После раскрытия загадки появятся дальние экспедиции.';
+      expeditionRows.append(row);
+    }
     $('journalDialog').hidden = false;
   }
 
@@ -411,6 +509,12 @@
     } else if (type === 'explore') {
       pet.needs.energy = clamp(pet.needs.energy - 4);
       pet.needs.satiety = clamp(pet.needs.satiety - 1);
+      if (pet.mysterySolved) {
+        pet.pendingExpedition = true;
+        show();
+        renderExpeditionOffer();
+        return;
+      }
       pet.inventory.berries = Math.min(99, pet.inventory.berries + 1);
       const next = discoveries.find(item => !pet.discoveries.includes(item.id));
       if (next) {
@@ -493,6 +597,8 @@
   $('journalBtn').onclick = openJournal;
   $('journalClose').onclick = () => { $('journalDialog').hidden = true; };
   $('journalDialog').onclick = event => { if (event.target === $('journalDialog')) $('journalDialog').hidden = true; };
+  $('expeditionDialog').onclick = event => { if (event.target === $('expeditionDialog')) $('expeditionDialog').hidden = true; };
+  $('expeditionLater').onclick = () => { $('expeditionDialog').hidden = true; };
 
   pet = read();
   if (pet) {
@@ -502,6 +608,7 @@
       if (pet.activity === 'sleep') pet.lastLine = 'Я выспалась, нашла воды и немного ягод. Рада тебя видеть!';
     }
     show();
+    if (pet.pendingExpedition) renderExpeditionOffer();
   } else $('select').classList.remove('hide');
 
   if (window.PetSave?.overlayEnabled) {

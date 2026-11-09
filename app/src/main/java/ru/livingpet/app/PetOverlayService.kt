@@ -239,7 +239,7 @@ class PetOverlayService : Service() {
         state.put("needs", needs)
         state.put("lastInteractionAt", time)
         state.put("updatedAt", time)
-        state.put("version", 3)
+        state.put("version", 4)
         state.put("lastLine", "Мне приятно, что ты меня погладил. Хорошо, что ты рядом!")
         state.put("bubble", "приятно! 💛")
 
