@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>html,body{margin:0;height:100%;background:transparent;overflow:hidden}canvas{width:100%;height:100%;display:block}</style>
+</head><body><canvas id="fox"></canvas>
+<script src="fox3d.bundle.js"></script>
+<script>
+// Floating fox. Android (FoxPet3DView.kt) drives it through window.Overlay.*
+(() => {
+  const q = new URLSearchParams(location.search);
+  const bridge = window.OverlayBridge;
+  let fox;
+  try {
+    fox = new Fox3D(document.getElementById('fox'), {
+      base: 'models/', view: 'overlay', facing: -0.35,
+      quality: (navigator.deviceMemory || 4) <= 2 ? 'low' : 'high', pixelRatio: 2,
+    });
+  } catch (e) { bridge?.failed(String(e)); return; }
+  fox.setState(q.get('sleep') === '1' ? 'sleep' : 'sit');
+  fox.load(parseInt(q.get('stage') || '0', 10))
+    .then(() => bridge?.ready())
+    .catch(e => bridge?.failed(String(e)));
+  let walking = false, sleeping = q.get('sleep') === '1', reactTimer = null;
+  const base = () => sleeping ? 'sleep' : walking ? 'walk' : 'sit';
+  window.Overlay = {
+    walk(on, run) { walking = on; fox.setState(on ? (run ? 'run' : 'walk') : base()); if (!on) fox.setFacing(0); },
+    face(dir) { fox.setFacing(dir); },
+    sleep(on) { sleeping = on; walking = false; fox.setState(base()); },
+    action(name) { fox.action(name); },
+    react(x, y) {
+      // coordinates arrive in device pixels of the overlay window
+      const s = window.devicePixelRatio || 1;
+      const part = fox.hitTest(x / s, y / s);
+      fox.lookAt(x / s, y / s);
+      clearTimeout(reactTimer);
+      if (sleeping) { fox.action('React'); return; }
+      if (part === 'head') { fox.setState('happy'); reactTimer = setTimeout(() => fox.setState(base()), 2600); }
+      else if (part === 'tail') { fox.setState('wag'); reactTimer = setTimeout(() => fox.setState(base()), 2200); }
+      else fox.action('React');
+    },
+    drag(dx) { fox.setFacing(dx > 4 ? 1 : dx < -4 ? -1 : 0); },
+    look(x, y) { const s = window.devicePixelRatio || 1; fox.lookAt(x / s, y / s); },
+    pause(p) { fox.setPaused(!!p); },
+  };
+})();
+</script></body></html>

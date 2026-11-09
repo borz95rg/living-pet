@@ -1,0 +1,8 @@
+{
+  "name": "living-pet-fox3d",
+  "private": true,
+  "scripts": {
+    "build": "esbuild fox3d.js --bundle --minify --format=iife --outfile=../../app/src/main/assets/fox3d.bundle.js && cp pet3d.js ../../app/src/main/assets/pet3d.js"
+  },
+  "devDependencies": { "three": "^0.187.0", "esbuild": "^0.28.2" }
+}

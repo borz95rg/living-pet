@@ -45,6 +45,7 @@ class PetOverlayService : Service() {
     private var lastTouchAt = System.currentTimeMillis()
     private var lastWanderAt = System.currentTimeMillis()
     private var wanderUntil = 0L
+    private var lastIdleActionAt = System.currentTimeMillis()
     private var sleeping = false
     private var running = false
     private var direction = 1
@@ -80,11 +81,14 @@ class PetOverlayService : Service() {
                     handler.postDelayed(this, 30_000L)
                     return
                 }
+                if (wanderUntil == 0L && now - lastIdleActionAt > 45_000L && kotlin.random.Random.nextInt(6) == 0) {
+                    lastIdleActionAt = now
+                    petView.playAction(listOf("Stretch", "React", "Jump")[kotlin.random.Random.nextInt(3)], 1_500L)
+                }
                 if (wanderUntil == 0L && now - lastTouchAt > 8 * 60_000L && now - lastWanderAt > 6 * 60_000L) {
                     running = kotlin.random.Random.nextInt(4) == 0
                     wanderUntil = now + if (running) 2_800L else 2_500L
-                    petView.setWalking(true)
-                    if (running) petView.playAction("Run", 2_800L)
+                    petView.setWalking(true, running)
                 }
                 if (wanderUntil > 0L && now < wanderUntil) {
                     val speedDp = if (running) 9 else 4
@@ -153,13 +157,12 @@ class PetOverlayService : Service() {
         val density = resources.displayMetrics.density
         val width = (205 * density).toInt()
         val height = (198 * density).toInt()
-        petView = FoxPet3DView(this, stage).apply {
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        sleeping = hour >= 22 || hour < 7
+        petView = FoxPet3DView(this, stage, sleeping).apply {
             setAnimationEnabled(screenOn)
             setTouchHandler { event -> handleTouch(event) }
         }
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        sleeping = hour >= 22 || hour < 7
-        petView.setSleeping(sleeping)
         params = WindowManager.LayoutParams(
             width, height,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -308,7 +311,10 @@ class PetOverlayService : Service() {
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
         if (receiverRegistered) runCatching { unregisterReceiver(screenReceiver) }
-        if (::petView.isInitialized) runCatching { windowManager.removeView(petView) }
+        if (::petView.isInitialized) {
+            runCatching { windowManager.removeView(petView) }
+            runCatching { petView.destroy() }
+        }
         save.edit().putBoolean("overlay_enabled", false).apply()
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()

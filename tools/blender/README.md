@@ -1,44 +1,58 @@
-# Living Fox Pet — 3D starter pack
+# Генератор 3D-лисицы
 
-## What this creates
-A Blender procedural starter character for five growth stages:
-1. Baby
-2. Cub
-3. Teen
-4. Adult
-5. Legendary
+`make_fox_3d.py` строит пять GLB-моделей лисы (малыш → легендарная форма) со скелетом и анимациями.
+Результат кладётся в `app/src/main/assets/models/`.
 
-Each stage is exported as its own GLB and editable BLEND scene. The rig uses named bones for the spine, head, three tail sections, ears, and leg chains. Six named animation actions are authored: Idle, Walk, Run, Jump, Sleep, React.
+## Запуск
 
-## Generate the assets
-1. Install Blender 4.x.
-2. Put `make_fox_pet.py` in an empty folder.
-3. Run from a terminal:
+Вариант 1 — Blender 4.2+ / 5.x:
 
-   `blender -b --python make_fox_pet.py`
+```bash
+# один раз: поставить scikit-image в Python Блендера
+<папка Blender>/<версия>/python/bin/python3 -m pip install scikit-image
+blender -b --python make_fox_3d.py -- --out ../../app/src/main/assets/models
+```
 
-4. Find outputs in the `exports` folder.
+Вариант 2 — Python 3.13 + модуль `bpy` (без интерфейса Blender):
 
-The Android app packages the five generated GLB files from
-`app/src/main/assets/models/`. Re-run the generator after changing the Blender
-script, then copy the five `.glb` files from `exports` to that folder. Each
-export contains exactly six named clips (`Idle`, `Walk`, `Run`, `Jump`, `Sleep`,
-`React`) for that growth stage.
+```bash
+python3.13 -m venv venv && venv/bin/pip install bpy scikit-image
+venv/bin/python make_fox_3d.py --out ../../app/src/main/assets/models
+```
 
-## Android integration
-The Android overlay uses Filament through SceneView 2.3.0 to load the matching
-growth-stage GLB. It loops `Idle`, switches to `Walk` while wandering, and plays
-`React` when touched. The other four clips are available for later game events.
-The Canvas pet remains visible if GLB loading or Filament initialization fails.
-Typical clip mapping:
-- Idle: loop while waiting
-- Walk: loop for short movement
-- Run: loop for fast movement
-- Jump: one-shot
-- Sleep: loop while resting
-- React: one-shot when touched, spoken to, or when an event occurs
+Опции: `--stages 1,4` — собрать только нужные стадии; `--blend` — дополнительно сохранить
+редактируемые `.blend`-файлы.
 
-For a floating overlay, Android still needs a separately implemented overlay service and the user's explicit “display over other apps” permission. The GLB does not itself create an Android overlay.
+## Как устроена модель
 
-## Important limitations
-This is a procedural prototype, not a final hand-sculpted commercial character. It provides separate mesh parts, a named armature, and starter keyframe actions. Before shipping, a 3D artist should refine topology, fur, facial expressions, paw contacts, skinning/weights, and animation polish. The current script parents rigid mesh parts to bones for a reliable starter rig; it is not soft-skin deformation.
+* **Тело** — одна гладкая сетка, вылепленная из полей расстояний (SDF) с плавным слиянием:
+  голова, щёчки, мордочка, грудка-манишка, туловище, бёдра, лапы. Никаких швов между шариками.
+* **Хвост** (у легендарной формы — три), **уши** с белым пухом внутри, **глаза** с янтарной
+  радужкой, зрачком и двумя бликами, **веки** (моргание, сон, прищур), нос, улыбка, рот.
+* **Раскраска** — цвета вершин по концепту: рыжая спина, белые мордочка, щёки, грудь и кончик
+  хвоста, тёмные «чулки» и кончики ушей. Легендарная форма — золотая с огненными полосами.
+* **Шерсть** — во втором UV-канале `FurData` записана длина меха для каждой вершины
+  (длинный на щеках, груди и хвосте, короткий на мордочке и лапах). Игра рисует 14 слоёв
+  меха шейдером из `tools/web/fox3d.js`.
+* **Скелет** — Root, Pelvis, Spine, Chest, Neck, Head, Mouth, Eye/Lid L/R, Ear L/R, по три кости
+  на каждую лапу и по четыре на хвост. Ноги анимируются через IK (лапы не проскальзывают),
+  затем всё запекается в обычные FK-ключи.
+
+## Анимации (в GLB: `Fox_<Stage>_<Clip>`)
+
+| Клип | Что делает | Цикл |
+|---|---|---|
+| Idle | стоит, дышит, водит ушами и хвостом | да |
+| Sit | сидит (основная поза), дышит, оглядывается | да |
+| Walk / Run | рысь / галоп на месте (окно двигает Android) | да |
+| Jump | присед, прыжок, приземление | нет |
+| Sleep | лежит, глаза закрыты, хвост обёрнут | да |
+| React | подпрыгивает от удивления, уши торчком | нет |
+| Happy | прищурилась, наклоняет голову, виляет хвостом (поглаживание) | да |
+| Eat | ест или пьёт из миски | да |
+| Stretch | потягивается «поклоном» | нет |
+| Wag | радостно виляет хвостом | да |
+| Blink | моргание (только веки, накладывается поверх) | нет |
+| Talk | движение рта (только рот, накладывается поверх) | да |
+
+Взгляд за пальцем и поворот головы считаются в реальном времени в `fox3d.js`.

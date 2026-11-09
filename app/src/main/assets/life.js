@@ -513,6 +513,7 @@
     $('scene').classList.toggle('night', night);
     $('sky').textContent = night ? '🌙' : '☀️';
     applyWeather();
+    window.Pet3D?.update(pet, stage, night);
     write();
   }
 
@@ -551,6 +552,7 @@
       return;
     }
     pet.inventory[item]--;
+    window.Pet3D?.event('feed');
     pet.needs.satiety = clamp(pet.needs.satiety + foods[item].satiety);
     pet.needs.mood = clamp(pet.needs.mood + foods[item].mood);
     pet.needs.affection = clamp(pet.needs.affection + 2);
@@ -566,6 +568,7 @@
 
   function act(type) {
     if (!pet) return;
+    if (type !== 'feed') window.Pet3D?.event(type);
     if (type === 'feed') { showFoodMenu(); return; }
     if (type === 'water') {
       pet.inventory.water = Math.min(4, pet.inventory.water + 2);
@@ -664,6 +667,7 @@
   $('foodClose').onclick = () => { $('foodMenu').hidden = true; };
   $('foodMenu').onclick = event => { if (event.target === $('foodMenu')) $('foodMenu').hidden = true; };
   $('petTap').onclick = tapPet;
+  $('pet3d').onclick = event => { window.Pet3D?.touch(event.offsetX, event.offsetY); tapPet(); };
   $('overlayBtn').onclick = () => {
     if (!pet) { toast('Сначала выбери питомца'); return; }
     if (pet.kind !== 'fox') { toast('Плавающий 3D-питомец сейчас доступен для лисицы'); return; }

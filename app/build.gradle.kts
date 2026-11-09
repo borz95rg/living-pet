@@ -16,6 +16,11 @@ android {
         jvmTarget = "17"
     }
 
+    androidResources {
+        // GLB models must stay uncompressed-friendly and readable by WebViewAssetLoader
+        noCompress += listOf("glb")
+    }
+
     defaultConfig {
         applicationId = "ru.livingpet.app"
         minSdk = 24
@@ -51,10 +56,6 @@ android {
 }
 
 dependencies {
-    // View-based Filament renderer for transparent GLB overlays.
-    implementation("io.github.sceneview:sceneview:2.3.0")
-    // SceneView's public API exposes these AndroidX and coroutine types.
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("androidx.activity:activity-ktx:1.9.3")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    // Serves assets over https://appassets.androidplatform.net so WebGL can load GLB models.
+    implementation("androidx.webkit:webkit:1.12.1")
 }
