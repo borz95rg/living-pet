@@ -2,7 +2,7 @@
   'use strict';
 
   const SAVE_KEY = 'livingPetSave';
-  const SAVE_VERSION = 2;
+  const SAVE_VERSION = 3;
   const MAX_OFFLINE_MS = 14 * 24 * 60 * 60 * 1000;
   const STEP_MS = 15 * 60 * 1000;
   const names = { fox: 'Искра', wolf: 'Туман', cat: 'Плюша', dog: 'Бублик' };
@@ -20,6 +20,13 @@
     berries: { name: 'ягоды', satiety: 17, mood: 6 },
     treat: { name: 'лакомство', satiety: 23, mood: 13 },
   };
+  const discoveries = [
+    { id: 'silver-feather', icon: '🪶', name: 'Серебряное перо', hint: 'Лёгкое, но не улетает даже на ветру.' },
+    { id: 'old-button', icon: '🟡', name: 'Пуговица с янтарём', hint: 'Внутри будто застыл крошечный солнечный луч.' },
+    { id: 'tiny-bell', icon: '🔔', name: 'Тихий колокольчик', hint: 'Звенит только тогда, когда рядом спокойно.' },
+    { id: 'moon-stone', icon: '🌙', name: 'Лунный камешек', hint: 'Находится там, где вечером лежит светлая полоса.' },
+    { id: 'marked-leaf', icon: '🍃', name: 'Лист с картой', hint: 'Прожилки складываются в знакомый узор долины.' },
+  ];
   const $ = id => document.getElementById(id);
   const now = () => Date.now();
   let pet;
@@ -35,6 +42,7 @@
       needs: { satiety: 94, water: 88, energy: 92, mood: 86, health: 100, clean: 96, affection: 8 },
       inventory: { meat: 2, fish: 1, berries: 3, treat: 1, water: 2 },
       routine: { play: 0, talk: 0, explore: 0, feed: 0, autonomous: 0, sleep: 0 },
+      discoveries: [], mysterySolved: false,
       activity: 'idle', lastActivityAt: time, lastInteractionAt: time,
       lastSimAt: time, nextActionAt: time + 25 * 60 * 1000,
     };
@@ -55,6 +63,10 @@
     Object.keys(data.inventory).forEach(key => { data.inventory[key] = Math.max(0, Math.min(99, Number(data.inventory[key]) || 0)); });
     data.routine = { ...defaults.routine, ...(data.routine || {}) };
     Object.keys(data.routine).forEach(key => { data.routine[key] = Math.max(0, Number(data.routine[key]) || 0); });
+    data.discoveries = Array.isArray(data.discoveries)
+      ? [...new Set(data.discoveries.filter(id => discoveries.some(item => item.id === id)))].slice(0, discoveries.length)
+      : [];
+    data.mysterySolved = Boolean(data.mysterySolved) || data.discoveries.length === discoveries.length;
     data.activity = activityNames[data.activity] ? data.activity : 'idle';
     data.lastActivityAt = Number(data.lastActivityAt) || Number(data.updatedAt) || data.bornAt;
     data.lastInteractionAt = Number(data.lastInteractionAt) || data.bornAt;
@@ -70,7 +82,7 @@
       if (!raw) raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return null;
       const data = JSON.parse(raw);
-      if (data.version === 1 || data.version === SAVE_VERSION) return migrate(data);
+      if ([1, 2, SAVE_VERSION].includes(data.version)) return migrate(data);
     } catch (_) { /* A damaged save never prevents starting a new game. */ }
     return null;
   }
@@ -248,7 +260,12 @@
     const habit = habits[0][1] > 0 ? `Любимое занятие — ${habits[0][0]}.` : 'Пока питомец с любопытством пробует всё понемногу.';
     const lastMoment = recent ? `А в последней записи осталось: «${recent}»` : 'Впереди у вас ещё много маленьких открытий.';
     const stageLine = stage >= 4 ? 'Питомец стал легендой вашей долины.' : stage >= 3 ? 'Питомец уже вырос и увереннее выбирает свой путь.' : stage >= 2 ? 'Питомец подрос и всё чаще отправляется исследовать новое.' : stage >= 1 ? 'Питомец понемногу осваивается и становится смелее.' : 'Это только начало вашей общей истории.';
-    return `${openings[pet.kind]} ${stageLine} ${habit} ${bond} ${lastMoment}`;
+    const clue = pet.mysterySolved
+      ? 'Пять странных находок сложились в карту тайного уголка долины.'
+      : pet.discoveries.length > 0
+        ? `В коллекции уже ${pet.discoveries.length} из ${discoveries.length} загадочных находок.`
+        : 'На поляне ещё ждут загадочные находки.';
+    return `${openings[pet.kind]} ${stageLine} ${habit} ${bond} ${clue} ${lastMoment}`;
   }
 
   function openJournal() {
@@ -268,6 +285,22 @@
       row.append(date, text);
       list.append(row);
     });
+    const owned = new Set(pet.discoveries);
+    const collection = $('discoveryList');
+    collection.replaceChildren();
+    discoveries.forEach((item, index) => {
+      const row = document.createElement('li');
+      const icon = document.createElement('span');
+      const text = document.createElement('span');
+      icon.textContent = owned.has(item.id) ? item.icon : '❔';
+      text.textContent = owned.has(item.id) ? `${item.name} — ${item.hint}` : `Загадка ${index + 1} · не найдена`;
+      row.append(icon, text);
+      if (owned.has(item.id)) row.classList.add('found');
+      collection.append(row);
+    });
+    $('discoveryProgress').textContent = pet.mysterySolved
+      ? 'Все находки собраны · тайна долины раскрыта'
+      : `Находки ${pet.discoveries.length} из ${discoveries.length}`;
     $('journalDialog').hidden = false;
   }
 
@@ -379,10 +412,23 @@
       pet.needs.energy = clamp(pet.needs.energy - 4);
       pet.needs.satiety = clamp(pet.needs.satiety - 1);
       pet.inventory.berries = Math.min(99, pet.inventory.berries + 1);
-      const found = ['перышко с серебряным кончиком', 'странную пуговицу', 'сухой лист с узором', 'маленький колокольчик'][pet.memories.length % 4];
-      line = pet.kind === 'fox' ? `Нашла ${found} и принесла домой. Запомню это приключение.` : `Мы обнаружили ${found}.`;
-      remember(`Вместе обнаружили ${found}.`);
-      pet.bubble = 'что это такое?';
+      const next = discoveries.find(item => !pet.discoveries.includes(item.id));
+      if (next) {
+        pet.discoveries.push(next.id);
+        line = `${next.icon} Нашли «${next.name}». ${next.hint}`;
+        if (pet.discoveries.length === discoveries.length && !pet.mysterySolved) {
+          pet.mysterySolved = true;
+          pet.xp = Math.min(32, pet.xp + 2);
+          line += ' Все части карты сошлись — тайный уголок найден!';
+        }
+        remember(line);
+        pet.bubble = pet.mysterySolved ? 'мы раскрыли тайну! ✨' : 'одна загадка разгадана!';
+      } else {
+        line = pet.mysterySolved
+          ? 'Мы снова заглянули в тайный уголок. Теперь это наше особое место.'
+          : 'Находок пока нет. Может быть, загадка откроется во время следующей прогулки?';
+        pet.bubble = pet.mysterySolved ? 'наш секретный уголок 💛' : 'поищем ещё?';
+      }
       setActivity('explore', line, now());
     } else if (type === 'weather') {
       pet.weatherIndex = (pet.weatherIndex + 1) % 4;
