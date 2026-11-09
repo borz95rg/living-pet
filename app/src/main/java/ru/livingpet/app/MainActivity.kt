@@ -1,6 +1,7 @@
 package ru.livingpet.app
 
 import android.app.Activity
+import android.Manifest
 import android.os.Bundle
 import android.webkit.WebChromeClient
 import android.webkit.JavascriptInterface
@@ -11,10 +12,12 @@ import android.net.Uri
 import android.provider.Settings
 import android.os.Build
 import android.webkit.WebView
+import android.content.pm.PackageManager
 
 class MainActivity : Activity() {
     private var petWeb: WebView? = null
     private var overlayPermissionRequested = false
+    private val notificationPermissionRequest = 5103
     @Suppress("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,14 +39,22 @@ class MainActivity : Activity() {
     private fun enableOverlay() {
         runOnUiThread {
             if (Settings.canDrawOverlays(this)) {
-                val service = Intent(this, PetOverlayService::class.java)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(service) else startService(service)
-                petWeb?.post { petWeb?.evaluateJavascript("window.overlayStateChanged && window.overlayStateChanged(true)", null) }
+                startPetOverlay()
             } else {
                 overlayPermissionRequested = true
                 startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
             }
         }
+    }
+
+    private fun startPetOverlay() {
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), notificationPermissionRequest)
+            return
+        }
+        val service = Intent(this, PetOverlayService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(service) else startService(service)
+        petWeb?.post { petWeb?.evaluateJavascript("window.overlayStateChanged && window.overlayStateChanged(true)", null) }
     }
 
     private fun disableOverlay() {
@@ -59,6 +70,18 @@ class MainActivity : Activity() {
             overlayPermissionRequested = false
             if (Settings.canDrawOverlays(this)) enableOverlay()
             petWeb?.post { petWeb?.evaluateJavascript("window.overlayStateChanged && window.overlayStateChanged(${Settings.canDrawOverlays(this)})", null) }
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == notificationPermissionRequest) {
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED && Settings.canDrawOverlays(this)) {
+                startPetOverlay()
+            } else {
+                petWeb?.post { petWeb?.evaluateJavascript("window.overlayStateChanged && window.overlayStateChanged(false)", null) }
+            }
         }
     }
 
