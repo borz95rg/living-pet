@@ -97,9 +97,12 @@
   // Add new fields without discarding saves made by earlier app versions.
   function migrate(data) {
     if (!data || !names[data.kind]) return null;
-    const defaults = freshPet(data.kind);
+    // This development build is dedicated to the fox. Preserve the existing
+    // save/progress, but move any earlier test pet to the fox campaign.
+    data.kind = 'fox';
+    const defaults = freshPet('fox');
     data.version = SAVE_VERSION;
-    data.name = typeof data.name === 'string' && data.name.trim() ? data.name : defaults.name;
+    data.name = 'Искра';
     data.bornAt = Number(data.bornAt) || defaults.bornAt;
     data.xp = Math.max(0, Math.min(32, Number(data.xp) || 0));
     data.memories = Array.isArray(data.memories) ? data.memories.slice(0, 40) : defaults.memories;

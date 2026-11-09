@@ -27,8 +27,8 @@ class MainActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = android.graphics.Color.rgb(22, 39, 48)
-        window.navigationBarColor = android.graphics.Color.rgb(22, 39, 48)
+        window.statusBarColor = android.graphics.Color.rgb(9, 37, 33)
+        window.navigationBarColor = android.graphics.Color.rgb(9, 37, 33)
         web = WebView(this)
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
