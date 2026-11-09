@@ -28,7 +28,7 @@ import kotlin.math.abs
 /** User-started animated fox overlay. Its idle loop pauses while the display is off. */
 class PetOverlayService : Service() {
     private lateinit var windowManager: WindowManager
-    private lateinit var petView: FoxPetView
+    private lateinit var petView: FoxPet3DView
     private lateinit var params: WindowManager.LayoutParams
     private val handler = Handler(Looper.getMainLooper())
     private var dragging = false
@@ -128,7 +128,10 @@ class PetOverlayService : Service() {
         val density = resources.displayMetrics.density
         val width = (205 * density).toInt()
         val height = (198 * density).toInt()
-        petView = FoxPetView(this, stage).apply { setAnimationEnabled(screenOn) }
+        petView = FoxPet3DView(this, stage).apply {
+            setAnimationEnabled(screenOn)
+            setTouchHandler { event -> handleTouch(event) }
+        }
         params = WindowManager.LayoutParams(
             width, height,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -142,7 +145,6 @@ class PetOverlayService : Service() {
             x = save.getInt("overlay_x", (bounds.width() - width) / 2).coerceIn(0, (bounds.width() - width).coerceAtLeast(0))
             y = save.getInt("overlay_y", (bounds.height() - height - (90 * density).toInt()).coerceAtLeast(0)).coerceIn(0, (bounds.height() - height).coerceAtLeast(0))
         }
-        petView.setOnTouchListener { _, event -> handleTouch(event) }
         try {
             windowManager.addView(petView, params)
             save.edit().putBoolean("overlay_enabled", true).apply()

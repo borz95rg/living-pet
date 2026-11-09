@@ -49,3 +49,8 @@ android {
         }
     }
 }
+
+dependencies {
+    // View-based Filament renderer for transparent GLB overlays (Java 17 compatible).
+    implementation("io.github.sceneview:sceneview:2.3.0")
+}

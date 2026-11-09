@@ -19,8 +19,18 @@ Each stage is exported as its own GLB and editable BLEND scene. The rig uses nam
 
 4. Find outputs in the `exports` folder.
 
+The Android app packages the five generated GLB files from
+`app/src/main/assets/models/`. Re-run the generator after changing the Blender
+script, then copy the five `.glb` files from `exports` to that folder. Each
+export contains exactly six named clips (`Idle`, `Walk`, `Run`, `Jump`, `Sleep`,
+`React`) for that growth stage.
+
 ## Android integration
-Use the GLB files with a runtime that supports glTF 2.0 skeletal animation (for example, Filament/SceneView). Load one growth-stage GLB at a time and select animation clips by name. Typical mapping:
+The Android overlay uses Filament through SceneView 2.3.0 to load the matching
+growth-stage GLB. It loops `Idle`, switches to `Walk` while wandering, and plays
+`React` when touched. The other four clips are available for later game events.
+The Canvas pet remains visible if GLB loading or Filament initialization fails.
+Typical clip mapping:
 - Idle: loop while waiting
 - Walk: loop for short movement
 - Run: loop for fast movement

@@ -55,6 +55,10 @@ def cone(name, loc, radius1, depth, material, rotation=(0,0,0)):
 def create_rig(prefix, stage, scale):
     # Clear scene for a clean standalone export
     bpy.ops.object.select_all(action='SELECT'); bpy.ops.object.delete(use_global=False)
+    # Actions are datablocks and survive deleting their armature users. Remove
+    # the previous stage's clips so each exported GLB contains exactly six.
+    for action in list(bpy.data.actions):
+        bpy.data.actions.remove(action)
     arm_data=bpy.data.armatures.new(prefix+"_Skeleton")
     arm=bpy.data.objects.new(prefix+"_RIG", arm_data)
     bpy.context.collection.objects.link(arm)
@@ -83,8 +87,13 @@ def create_rig(prefix, stage, scale):
 
     # All pieces are separate meshes, attached to bones so the rig can animate them.
     def attach(obj, bone_name):
+        # Keep the mesh in its intended world-space location while assigning its
+        # bone parent. Reading matrix_world after setting parent captures Blender's
+        # already-shifted matrix and makes exported parts drift away from the body.
+        world_matrix = obj.matrix_world.copy()
         obj.parent=arm; obj.parent_type='BONE'; obj.parent_bone=bone_name
-        obj.matrix_parent_inverse=(arm.matrix_world @ arm.data.bones[bone_name].matrix_local).inverted() @ obj.matrix_world
+        obj.matrix_parent_inverse=(arm.matrix_world @ arm.data.bones[bone_name].matrix_local).inverted()
+        obj.matrix_world = world_matrix
         return obj
 
     # Main silhouette
