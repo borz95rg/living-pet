@@ -77,7 +77,7 @@ function furMaterial(furTex, shell, opts) {
         if (uShell > 0.0) {
           if (vFurLen < 0.0015 || fs.a < uShell) discard;
         }
-        float ao = mix(0.55, 1.22, pow(uShell, 0.8));   // dark roots, sunlit tips
+        float ao = mix(0.68, 1.12, pow(uShell, 0.9));   // dark roots, sunlit tips
         diffuseColor.rgb *= ao * mix(1.0, fs.r / 0.92, 0.6);`);
   };
   m.customProgramCacheKey = () => 'fur-v1' + (opts.legendary ? 'L' : '');
@@ -106,8 +106,8 @@ function blobShadowTexture() {
 export class Fox3D {
   constructor(canvas, opts = {}) {
     this.canvas = canvas;
-    this.opts = Object.assign({ base: 'models/', shells: 20, quality: 'high', facing: -0.42, view: 'room', pixelRatio: 2 }, opts);
-    if (this.opts.quality === 'low') this.opts.shells = 11;
+    this.opts = Object.assign({ base: 'models/', shells: 24, quality: 'high', facing: -0.42, view: 'room', pixelRatio: 2 }, opts);
+    if (this.opts.quality === 'low') this.opts.shells = 12;
     const r = this.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, premultipliedAlpha: true, powerPreference: 'low-power' });
     r.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.opts.pixelRatio));
     r.outputColorSpace = THREE.SRGBColorSpace;
@@ -158,7 +158,7 @@ export class Fox3D {
     this.legendary = legendary;
     const shells = this.opts.shells;
     this.furUniforms = this.furUniforms || { uWind: { value: new THREE.Vector3() } };
-    const furOpts = { furScale: 1.0, density: 0.030, legendary, uniforms: this.furUniforms };
+    const furOpts = { furScale: 1.08, density: 0.034, legendary, uniforms: this.furUniforms };
     const shellMats = [];
     for (let i = 0; i <= shells; i++) shellMats.push(furMaterial(this.furTex, i / shells, furOpts));
     const toAdd = [];
@@ -175,7 +175,7 @@ export class Fox3D {
           toAdd.push([o.parent, s]);
         }
       } else if (n.startsWith('Eye')) {
-        o.material = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.03,
+        o.material = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.24, clearcoat: 0.75, clearcoatRoughness: 0.03,
           emissive: legendary ? 0xffb030 : 0x000000, emissiveIntensity: legendary ? 0.15 : 0 });
       } else if (n.startsWith('Glint')) {
         o.material = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });

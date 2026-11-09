@@ -345,7 +345,7 @@ def build_stage(S, out_dir):
     for side, sx in (("L", 1), ("R", -1)):
         dirv = np.array([sx * 0.45, -0.85, 0.16]); dirv /= np.linalg.norm(dirv)
         sp = surface_point(body, Hc, dirv)
-        er = S['eye_r'] * 1.42
+        er = S['eye_r'] * 1.22  # more natural eye-to-head ratio; less toy-like
         center = sp - dirv * er * 0.70
         fwd = dirv * 0.78 + np.array([0, -1, 0]) * 0.22; fwd /= np.linalg.norm(fwd)
         eyes.append(dict(side=side, sx=sx, c=center, r=er, f=fwd))

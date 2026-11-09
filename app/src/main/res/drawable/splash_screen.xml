@@ -1,6 +1,6 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@drawable/splash_base" />
     <item>
-        <bitmap android:src="@drawable/splash_fox" android:gravity="centerCrop" />
+        <bitmap android:src="@drawable/splash_fox" android:gravity="fill" />
     </item>
 </layer-list>
