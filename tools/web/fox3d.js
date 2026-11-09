@@ -9,30 +9,33 @@ const FUR_PARTS = /^(Body|Tail|Ear_)/;
 
 // ---------------------------------------------------------------- fur texture
 function makeFurTexture(size = 256) {
+  // Fur in tufts: each clump is a cone of strands that share a height,
+  // so the shells read as soft locks of fur rather than velvet.
   const data = new Uint8Array(size * size * 4);
   const height = new Float32Array(size * size);
   const bright = new Float32Array(size * size).fill(1);
   let seed = 1337;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const cell = 3;
-  for (let cy = 0; cy < size; cy += cell) {
-    for (let cx = 0; cx < size; cx += cell) {
-      const px = cx + rnd() * cell, py = cy + rnd() * cell;
-      const h = 0.35 + 0.65 * Math.pow(rnd(), 0.6), r = 1.6 + rnd() * 1.4, b = 0.82 + rnd() * 0.3;
-      for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
-        const x = (Math.floor(px) + dx + size) % size, y = (Math.floor(py) + dy + size) % size;
-        const d = Math.hypot(Math.floor(px) + dx + 0.5 - px, Math.floor(py) + dy + 0.5 - py) / r;
-        if (d >= 1) continue;
-        const v = h * (1 - d * d);
-        const i = y * size + x;
-        if (v > height[i]) { height[i] = v; bright[i] = b; }
-      }
+  const stamp = (px, py, r, h, b, sharp) => {
+    const R = Math.ceil(r);
+    for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+      const x = (Math.floor(px) + dx + size) % size, y = (Math.floor(py) + dy + size) % size;
+      const d = Math.hypot(Math.floor(px) + dx + 0.5 - px, Math.floor(py) + dy + 0.5 - py) / r;
+      if (d >= 1) continue;
+      const v = h * Math.pow(1 - d, sharp);
+      const i = y * size + x;
+      if (v > height[i]) { height[i] = v; bright[i] = b; }
     }
-  }
+  };
+  // big soft clumps
+  for (let n = 0; n < 900; n++) stamp(rnd() * size, rnd() * size, 5 + rnd() * 5, 0.55 + 0.45 * rnd(), 0.88 + rnd() * 0.22, 0.75);
+  // fine strands on top so the surface never looks bald
+  for (let cy = 0; cy < size; cy += 3) for (let cx = 0; cx < size; cx += 3)
+    stamp(cx + rnd() * 3, cy + rnd() * 3, 1.4 + rnd(), 0.25 + 0.4 * rnd(), 0.8 + rnd() * 0.3, 1.0);
   for (let i = 0; i < size * size; i++) {
-    const b = Math.min(255, bright[i] * 235);
+    const b = Math.min(255, bright[i] * 232);
     data[i * 4] = b; data[i * 4 + 1] = b; data[i * 4 + 2] = b;
-    data[i * 4 + 3] = Math.round(height[i] * 255);
+    data[i * 4 + 3] = Math.round(Math.min(1, height[i]) * 255);
   }
   const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -53,16 +56,19 @@ function furMaterial(furTex, shell, opts) {
     sh.uniforms.uFurTex = { value: furTex };
     sh.uniforms.uFurScale = { value: opts.furScale };
     sh.uniforms.uDensity = { value: opts.density };
+    sh.uniforms.uWind = opts.uniforms.uWind;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
         attribute vec2 furData; attribute vec2 furUv;
-        uniform float uShell; uniform float uFurScale; uniform float uDensity;
+        uniform float uShell; uniform float uFurScale; uniform float uDensity; uniform vec3 uWind;
         varying vec2 vFurUv; varying float vFurLen;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         float fl = furData.x * uFurScale;
         vFurLen = fl; vFurUv = furUv * uDensity;
         transformed += objectNormal * (uShell * fl);
-        transformed.y -= uShell * uShell * fl * 0.45;`);
+        transformed.y -= uShell * uShell * fl * 0.55;
+        transformed.z -= uShell * uShell * fl * 0.35;   // combed back towards the tail
+        transformed += uWind * (uShell * uShell * fl * 1.6);`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform sampler2D uFurTex; uniform float uShell; varying vec2 vFurUv; varying float vFurLen;`)
@@ -71,7 +77,7 @@ function furMaterial(furTex, shell, opts) {
         if (uShell > 0.0) {
           if (vFurLen < 0.0015 || fs.a < uShell) discard;
         }
-        float ao = mix(0.50, 1.10, uShell);
+        float ao = mix(0.55, 1.22, pow(uShell, 0.8));   // dark roots, sunlit tips
         diffuseColor.rgb *= ao * mix(1.0, fs.r / 0.92, 0.6);`);
   };
   m.customProgramCacheKey = () => 'fur-v1' + (opts.legendary ? 'L' : '');
@@ -100,8 +106,8 @@ function blobShadowTexture() {
 export class Fox3D {
   constructor(canvas, opts = {}) {
     this.canvas = canvas;
-    this.opts = Object.assign({ base: 'models/', shells: 14, quality: 'high', facing: -0.42, view: 'room', pixelRatio: 2 }, opts);
-    if (this.opts.quality === 'low') this.opts.shells = 8;
+    this.opts = Object.assign({ base: 'models/', shells: 20, quality: 'high', facing: -0.42, view: 'room', pixelRatio: 2 }, opts);
+    if (this.opts.quality === 'low') this.opts.shells = 11;
     const r = this.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, premultipliedAlpha: true, powerPreference: 'low-power' });
     r.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.opts.pixelRatio));
     r.outputColorSpace = THREE.SRGBColorSpace;
@@ -128,16 +134,16 @@ export class Fox3D {
   _emit(ev, a) { (this.listeners[ev] || []).forEach(f => f(a)); }
 
   _lights() {
-    this.hemi = new THREE.HemisphereLight(0xfff1e0, 0x9a8a7a, 1.35); this.scene.add(this.hemi);
+    this.hemi = new THREE.HemisphereLight(0xfff0e0, 0xa08870, 1.45); this.scene.add(this.hemi);
     const key = this.key = new THREE.DirectionalLight(0xfff0dc, 2.4); key.position.set(-1.6, 2.6, 2.6); this.scene.add(key);
     const fill = this.fill = new THREE.DirectionalLight(0xcfe3ff, 0.65); fill.position.set(2.2, 0.8, 1.5); this.scene.add(fill);
-    const rim = this.rim = new THREE.DirectionalLight(0xffe2b8, 2.0); rim.position.set(0.6, 2.0, -2.8); this.scene.add(rim);
+    const rim = this.rim = new THREE.DirectionalLight(0xffd7a0, 3.2); rim.position.set(1.2, 2.2, -2.6); this.scene.add(rim);
   }
 
   setNight(night) {
-    this.hemi.color.set(night ? 0xd6dcf0 : 0xfff1e0); this.hemi.intensity = night ? 1.15 : 1.35;
+    this.hemi.color.set(night ? 0xd6dcf0 : 0xfff0e0); this.hemi.intensity = night ? 1.2 : 1.45;
     this.key.color.set(night ? 0xffe6cc : 0xfff0dc); this.key.intensity = night ? 2.0 : 2.4;
-    this.rim.color.set(night ? 0x9fc0ff : 0xffe2b8);
+    this.rim.color.set(night ? 0xb8ccff : 0xffd7a0);
   }
 
   async load(stage) {
@@ -151,7 +157,8 @@ export class Fox3D {
     const legendary = !!info.legendary;
     this.legendary = legendary;
     const shells = this.opts.shells;
-    const furOpts = { furScale: 1.0, density: 0.045, legendary };
+    this.furUniforms = this.furUniforms || { uWind: { value: new THREE.Vector3() } };
+    const furOpts = { furScale: 1.0, density: 0.030, legendary, uniforms: this.furUniforms };
     const shellMats = [];
     for (let i = 0; i <= shells; i++) shellMats.push(furMaterial(this.furTex, i / shells, furOpts));
     const toAdd = [];
@@ -198,7 +205,9 @@ export class Fox3D {
     this.actions = {};
     this.current = null;
     this.mixer.addEventListener('finished', e => this._onFinished(e));
+    this.oneShot = null;
     this._play(this.state === 'walk' ? 'Walk' : this._baseClip(), 0);
+    this._setupPhysics();
     this._scheduleBlink();
     this._emit('loaded', { stage, clips: Object.keys(this.clips) });
   }
@@ -228,7 +237,9 @@ export class Fox3D {
   }
 
   _baseClip() {
-    return ({ sit: 'Sit', idle: 'Idle', walk: 'Walk', run: 'Run', sleep: 'Sleep', eat: 'Eat', happy: 'Happy', wag: 'Wag' })[this.state] || 'Sit';
+    return ({ sit: 'Sit', idle: 'Idle', walk: 'Walk', run: 'Run', sleep: 'Sleep', eat: 'Eat', drink: 'Drink',
+      happy: 'Happy', wag: 'Wag', sad: 'Sad', rest: 'Rest', groom: 'Groom', forage: 'Forage', scared: 'Scared',
+      sniff: 'Sniff' })[this.state] || 'Sit';
   }
 
   _action(name) {
@@ -237,33 +248,52 @@ export class Fox3D {
     return this.actions[name];
   }
 
-  _play(name, fade = 0.35, once = false) {
-    const a = this._action(name); if (!a) return;
+  _play(name, fade = 0.35, once = false, reps = 1) {
+    const a = this._action(name); if (!a) return false;
     a.reset();
-    a.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity);
+    a.setLoop(once ? (reps > 1 ? THREE.LoopRepeat : THREE.LoopOnce) : THREE.LoopRepeat, once ? reps : Infinity);
     a.clampWhenFinished = once;
     a.enabled = true; a.setEffectiveWeight(1); a.setEffectiveTimeScale(1);
     if (this.current && this.current !== a) {
       a.play(); if (fade > 0) this.current.crossFadeTo(a, fade, false); else this.current.stop();
     } else a.play();
     this.current = a; this.currentName = name;
+    return true;
   }
 
   _onFinished(e) {
     const name = e.action.getClip().name.replace(/^Fox_[A-Za-z]+_/, '');
     if (name === 'Blink' || name === 'Talk') { e.action.stop(); return; }
-    if (e.action === this.current) this._play(this._baseClip(), 0.3);
+    if (e.action === this.current) {
+      this.oneShot = null;
+      this._play(this._baseClip(), 0.35);
+      this._emit('actionEnd', name);
+    }
   }
 
-  /** sit | idle | walk | run | sleep | eat | happy | wag */
-  setState(state) {
-    if (state === this.state && this.currentName === this._baseClip()) return;
+  /** Base (looping) states: sit idle walk run sleep eat drink happy wag sad rest groom forage scared sniff.
+   *  A running one-shot action is not interrupted unless `force` is set. */
+  setState(state, force = false) {
+    const changed = state !== this.state;
     this.state = state;
-    if (this.mixer) this._play(this._baseClip(), state === 'sleep' ? 0.8 : 0.35);
+    if (!this.mixer) return;
+    if (this.oneShot && !force) return;            // the action returns to the new base state when it ends
+    if (!changed && this.currentName === this._baseClip()) return;
+    this.oneShot = null;
+    this._play(this._baseClip(), state === 'sleep' ? 0.8 : 0.35);
   }
 
-  /** one-shot actions: React, Jump, Stretch */
-  action(name) { if (this.mixer && this.clips[name]) this._play(name, 0.2, true); }
+  /** One-shot action with priority (1 flourish, 2 play, 3 reaction). Lower priority never cuts a higher one.
+   *  Looping clips (TailChase, Groom, ScratchEar…) can be repeated `reps` times. Returns true if it started. */
+  action(name, priority = 2, reps = 1) {
+    if (!this.mixer || !this.clips[name]) return false;
+    if (this.oneShot && this.oneShot.priority > priority) return false;
+    if (this.walkTarget != null && priority < 3) return false;
+    this.oneShot = { name, priority };
+    return this._play(name, 0.25, true, reps);
+  }
+
+  busy() { return !!this.oneShot || this.walkTarget != null; }
 
   talk(seconds = 1.6) {
     const a = this._action('Talk'); if (!a) return;
@@ -271,9 +301,94 @@ export class Fox3D {
   }
 
   blink() {
-    if (this.state === 'sleep' || this.currentName === 'Happy') return;
+    const closedEyes = ['Sleep', 'Happy', 'Sad', 'Groom', 'ScratchEar', 'Yawn', 'WakeUp', 'Lick'];
+    if (closedEyes.includes(this.currentName)) return;
     const a = this._action('Blink'); if (!a) return;
     a.reset(); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = false; a.play();
+  }
+
+  // ---------------------------------------------------------- secondary motion
+  /** Spring chains for tails and ears: they lag behind, overshoot and settle. */
+  _setupPhysics() {
+    const B = this.bones; this.chains = [];
+    const chainOf = (prefix) => { const out = []; for (let i = 1; i <= 4; i++) { const b = B[prefix + String(i).padStart(2, '0')]; if (b) out.push(b); } return out; };
+    for (const pre of ['Tail_', 'TailA_', 'TailB_', 'TailC_']) {
+      const bones = chainOf(pre); if (!bones.length) continue;
+      this.chains.push({ bones, k: 90, damp: 7, gravity: 0.6, maxAng: 0.75, nodes: [] });
+    }
+    for (const s of ['L', 'R']) if (B['Ear_' + s]) this.chains.push({ bones: [B['Ear_' + s]], k: 260, damp: 9, gravity: 0, maxAng: 0.35, nodes: [] });
+    this.model.updateMatrixWorld(true);
+    const wp = new THREE.Vector3(), wq = new THREE.Vector3();
+    for (const c of this.chains) {
+      c.len = c.bones.map((b, i) => {
+        const nxt = c.bones[i + 1];
+        if (nxt) { b.getWorldPosition(wp); nxt.getWorldPosition(wq); return wp.distanceTo(wq); }
+        return null;
+      });
+      const known = c.len.filter(x => x); const avg = known.length ? known.reduce((a, b) => a + b) / known.length : 0.25 * this.root.scale.x;
+      c.len = c.len.map(x => x || (c.bones.length === 1 ? 0.3 * this.root.scale.x : avg));
+    }
+    this._physReset = true;
+  }
+
+  /** push tails and ears, e.g. when the overlay window is dragged (screen px) */
+  nudge(dx, dy = 0) {
+    if (!this.chains) return;
+    const v = new THREE.Vector3(-dx, dy, 0).multiplyScalar(0.02);
+    for (const c of this.chains) for (const n of c.nodes) n.v.add(v);
+    this._windKick = Math.min(1.5, (this._windKick || 0) + Math.abs(dx) * 0.01);
+  }
+
+  _physicsUpdate(dt) {
+    if (!this.chains) return;
+    const p0 = new THREE.Vector3(), dir = new THREE.Vector3(), tgt = new THREE.Vector3();
+    const q = new THREE.Quaternion(), wq = new THREE.Quaternion(), pq = new THREE.Quaternion();
+    const yAxis = new THREE.Vector3(0, 1, 0);
+    const steps = 2, h = dt / steps;
+    for (const c of this.chains) {
+      for (let i = 0; i < c.bones.length; i++) {
+        const b = c.bones[i];
+        b.getWorldPosition(p0); b.getWorldQuaternion(wq);
+        dir.copy(yAxis).applyQuaternion(wq).normalize();          // bone points along local +Y
+        tgt.copy(p0).addScaledVector(dir, c.len[i]);
+        let n = c.nodes[i];
+        if (!n || this._physReset || n.x.distanceTo(tgt) > c.len[i] * 3) { n = c.nodes[i] = { x: tgt.clone(), v: new THREE.Vector3() }; continue; }
+        for (let s = 0; s < steps; s++) {
+          const acc = tgt.clone().sub(n.x).multiplyScalar(c.k).addScaledVector(n.v, -c.damp);
+          acc.y -= c.gravity;
+          n.v.addScaledVector(acc, h); n.x.addScaledVector(n.v, h);
+        }
+        const nd = n.x.clone().sub(p0); if (nd.lengthSq() < 1e-10) continue;
+        nd.normalize(); n.x.copy(p0).addScaledVector(nd, c.len[i]);
+        q.setFromUnitVectors(dir, nd);
+        const ang = 2 * Math.acos(Math.min(1, Math.abs(q.w)));
+        if (ang > c.maxAng) q.slerp(new THREE.Quaternion(), 1 - c.maxAng / ang);
+        b.parent.getWorldQuaternion(pq);
+        b.quaternion.copy(pq.clone().invert().multiply(q).multiply(wq));
+        b.updateMatrixWorld(true);
+      }
+    }
+    this._physReset = false;
+  }
+
+  /** wind in the fur: 0 calm … 1 strong (weather), plus a kick from movement */
+  setWind(strength) { this.windStrength = strength; }
+
+  _windUpdate(dt) {
+    if (!this.furUniforms) return;
+    const t = performance.now() / 1000;
+    const base = this.windStrength || 0;
+    this._windKick = Math.max(0, (this._windKick || 0) - dt * 1.5);
+    const gust = base * (0.55 + 0.45 * Math.sin(t * 1.7) * Math.sin(t * 0.63 + 1.3)) + this._windKick * 0.4;
+    // wind blows from screen-left to right in world space; convert into the model's bind space
+    const w = new THREE.Vector3(1, 0.1, 0.35).normalize().multiplyScalar(gust * 0.9);
+    if (this.walkTarget != null) w.x -= Math.sign(this.walkTarget - this.root.position.x) * 0.5;
+    w.applyQuaternion(this.root.quaternion.clone().invert());
+    this.furUniforms.uWind.value.lerp(w, Math.min(1, dt * 4));
+    if (base > 0.05 && this.chains) {
+      const push = new THREE.Vector3(gust * 0.9 * dt * 6, 0, 0);
+      for (const c of this.chains) for (const n of c.nodes) n.v.add(push);
+    }
   }
 
   _scheduleBlink() {
@@ -361,6 +476,8 @@ export class Fox3D {
     this.mixer.update(dt);
     this.root.updateMatrixWorld(true);
     this._lookUpdate(dt);
+    this._physicsUpdate(dt);
+    this._windUpdate(dt);
     const rp = new THREE.Vector3(); (this.bones.Root || this.root).getWorldPosition(rp);
     this.shadow.position.set(rp.x, 0.002, rp.z);
     const lift = Math.max(0, rp.y);

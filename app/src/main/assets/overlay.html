@@ -20,25 +20,40 @@
   fox.load(parseInt(q.get('stage') || '0', 10))
     .then(() => bridge?.ready())
     .catch(e => bridge?.failed(String(e)));
-  let walking = false, sleeping = q.get('sleep') === '1', reactTimer = null;
+  let walking = false, sleeping = q.get('sleep') === '1', reactTimer = null, lastDx = 0;
   const base = () => sleeping ? 'sleep' : walking ? 'walk' : 'sit';
+  const LOOPING = ['TailChase', 'Groom', 'ScratchEar', 'Sniff', 'Scared'];
   window.Overlay = {
-    walk(on, run) { walking = on; fox.setState(on ? (run ? 'run' : 'walk') : base()); if (!on) fox.setFacing(0); },
+    walk(on, run) { walking = on; fox.setState(on ? (run ? 'run' : 'walk') : base(), true); if (!on) fox.setFacing(0); },
     face(dir) { fox.setFacing(dir); },
-    sleep(on) { sleeping = on; walking = false; fox.setState(base()); },
-    action(name) { fox.action(name); },
+    sleep(on) {
+      const was = sleeping; sleeping = on; walking = false;
+      if (was && !on) { fox.state = base(); fox.action('WakeUp', 3); } else fox.setState(base(), true);
+    },
+    /** idle flourish chosen by Android: Stretch, Yawn, LookAround, ScratchEar, Groom, TailChase, Spin, Jump… */
+    action(name) { if (!sleeping || name === 'WakeUp') fox.action(name, 1, LOOPING.includes(name) ? 2 : 1); },
     react(x, y) {
       // coordinates arrive in device pixels of the overlay window
       const s = window.devicePixelRatio || 1;
       const part = fox.hitTest(x / s, y / s);
       fox.lookAt(x / s, y / s);
       clearTimeout(reactTimer);
-      if (sleeping) { fox.action('React'); return; }
-      if (part === 'head') { fox.setState('happy'); reactTimer = setTimeout(() => fox.setState(base()), 2600); }
-      else if (part === 'tail') { fox.setState('wag'); reactTimer = setTimeout(() => fox.setState(base()), 2200); }
-      else fox.action('React');
+      if (sleeping) { fox.action('WakeUp', 3); return; }
+      if (part === 'head') { fox.setState('happy', true); reactTimer = setTimeout(() => fox.setState(base(), true), 2600); }
+      else if (part === 'ears') fox.action('ScratchEar', 3);
+      else if (part === 'tail') fox.action(Math.random() < 0.5 ? 'TailChase' : 'Spin', 3);
+      else fox.action('React', 3);
     },
-    drag(dx) { fox.setFacing(dx > 4 ? 1 : dx < -4 ? -1 : 0); },
+    /** cumulative horizontal drag distance since finger down (px) */
+    drag(dx) {
+      if (Math.abs(dx) < Math.abs(lastDx) * 0.5 && Math.abs(lastDx) > 30) lastDx = 0;   // new gesture
+      const s = window.devicePixelRatio || 1;
+      fox.nudge((dx - lastDx) / s, 0); lastDx = dx;
+      fox.setFacing(dx > 4 ? 1 : dx < -4 ? -1 : 0);
+    },
+    /** raw per-move delta of the window (px): tail and ears swing */
+    nudge(dx, dy) { const s = window.devicePixelRatio || 1; fox.nudge(dx / s, -dy / s); },
+    dragEnd() { lastDx = 0; },
     look(x, y) { const s = window.devicePixelRatio || 1; fox.lookAt(x / s, y / s); },
     pause(p) { fox.setPaused(!!p); },
   };

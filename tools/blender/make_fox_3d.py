@@ -58,10 +58,10 @@ def hexc(h):
     h = h.lstrip('#'); return np.array([int(h[i:i+2], 16) / 255 for i in (0, 2, 4)])
 
 PAL = dict(
-    orange=hexc('#F0742A'), back=hexc('#D9561C'), white=hexc('#FFF6EC'), cream=hexc('#FFE3C8'),
-    dark=hexc('#3A2219'), darkleg=hexc('#4A2A1E'), earin=hexc('#FFD9CF'), nose=hexc('#1E1412'),
-    mouth=hexc('#7A2E2E'), tongue=hexc('#E86F78'), sclera=hexc('#FFF6EA'), iris_in=hexc('#F6BE45'),
-    iris_out=hexc('#B5621A'), limbal=hexc('#3B1D0E'), pupil=hexc('#120806'),
+    orange=hexc('#FF7424'), back=hexc('#E5501A'), white=hexc('#FFF8F0'), cream=hexc('#FFE6CC'),
+    dark=hexc('#2E1A14'), darkleg=hexc('#3D2219'), earin=hexc('#FFD9CF'), nose=hexc('#1E1412'),
+    mouth=hexc('#7A2E2E'), tongue=hexc('#E86F78'), sclera=hexc('#2E1A14'), iris_in=hexc('#E59A3A'),
+    iris_out=hexc('#6B3414'), limbal=hexc('#1E0E08'), pupil=hexc('#120806'),
 )
 PAL_LEG = dict(PAL, orange=hexc('#FF951C'), back=hexc('#E5600A'), white=hexc('#FFF1C0'),
                cream=hexc('#FFE7A6'), dark=hexc('#C9561A'), darkleg=hexc('#E0791C'), earin=hexc('#FFF0B0'),
@@ -265,7 +265,7 @@ def build_stage(S, out_dir):
     pal = PAL_LEG if legendary else PAL
     hx, hy, hz = S['head']; L = S['body_len']; R = S['body_r']; leg = S['leg']
     sc = (hx + 0.15) / 0.43  # overall size factor
-    furL = S['fur'] * 1.35
+    furL = S['fur'] * 2.1
 
     # --- key points (fox faces -Y, +X is its left, ground z=0)
     h_t = leg + R * 0.78
@@ -284,13 +284,13 @@ def build_stage(S, out_dir):
     E("Chest", (0, shoulder_y + R * 0.15, h_t + R * 0.06), (R * 1.0, R * 1.15, R * 1.06), fur=1.25, tag="chest")
     E("Spine", (0, (shoulder_y + hip_y) / 2, h_t), (R * 0.9, max(L * 0.42, R), R * 0.92), fur=1.1, tag="spine")
     E("Pelvis", (0, hip_y - R * 0.1, h_t + R * 0.02), (R * 0.95, R * 1.15, R * 0.95), fur=1.2, tag="hips")
-    E("Chest", (0, shoulder_y - R * 0.55, h_t + R * 0.25), (R * 0.62, R * 0.42, R * 0.7), k=0.12 * sc, fur=1.9, tag="ruff")
+    E("Chest", (0, shoulder_y - R * 0.55, h_t + R * 0.25), (R * 0.62, R * 0.42, R * 0.7), k=0.12 * sc, fur=2.6, tag="ruff")
     # neck & head
     C("Neck", neck_base, head_base, R * 0.72, hx * 0.62, k=0.09 * sc, fur=1.5, tag="neck")
     E("Head", Hc, (hx, hy, hz), k=0.07 * sc, fur=0.9, tag="head")
     for sx in (1, -1):
-        E("Head", Hc + np.array([sx * hx * 0.80, hy * 0.08, -hz * 0.44]), (hx * 0.44, hy * 0.42, hz * 0.38),
-          k=0.07 * sc, fur=2.6, tag="cheek")
+        E("Head", Hc + np.array([sx * hx * 0.80, hy * 0.08, -hz * 0.44]), (hx * 0.46, hy * 0.40, hz * 0.36),
+          k=0.07 * sc, fur=3.4, tag="cheek")
     mz = Hc + np.array([0, -hy * 0.80 - S['muzzle'] * 0.35, -hz * 0.36])
     E("Head", mz, (hx * 0.36, hy * 0.30 + S['muzzle'] * 0.55, hz * 0.27), k=0.09 * sc, fur=0.25, tag="muzzle",
       R_=np.array(Matrix.Rotation(math.radians(-8), 3, 'X')))
@@ -345,9 +345,9 @@ def build_stage(S, out_dir):
     for side, sx in (("L", 1), ("R", -1)):
         dirv = np.array([sx * 0.45, -0.85, 0.16]); dirv /= np.linalg.norm(dirv)
         sp = surface_point(body, Hc, dirv)
-        er = S['eye_r'] * 1.22
-        center = sp - dirv * er * 0.58
-        fwd = dirv * 0.45 + np.array([0, -1, 0]) * 0.55; fwd /= np.linalg.norm(fwd)
+        er = S['eye_r'] * 1.42
+        center = sp - dirv * er * 0.70
+        fwd = dirv * 0.78 + np.array([0, -1, 0]) * 0.22; fwd /= np.linalg.norm(fwd)
         eyes.append(dict(side=side, sx=sx, c=center, r=er, f=fwd))
 
     # ================================================================ armature
@@ -453,6 +453,11 @@ def build_stage(S, out_dir):
     if legendary:
         stripe = (np.sin(y * 38 / sc + z * 22 / sc) * 0.5 + 0.5) ** 10 * smoothstep(0.3, 0.9, np.abs(x) / R) * (1 - white)
         col = col * (1 - stripe[:, None]) + hexc('#FFF7C0') * stripe[:, None]
+    # dark eyeliner rim around each eye, short fur there
+    for e in eyes:
+        de = np.linalg.norm(v - e['c'], axis=1)
+        rim = smoothstep(e['r'] * 1.38, e['r'] * 1.08, de)
+        col = col * (1 - 0.85 * rim[:, None]) + pal['dark'] * 0.85 * rim[:, None]
     # shorter fur around eyes / mouth
     for e in eyes:
         de = np.linalg.norm(v - e['c'], axis=1)
@@ -487,7 +492,7 @@ def build_stage(S, out_dir):
         topness = smoothstep(-0.2, 1.0, vertex_normals(tv, tf)[:, 2])
         tcol = tcol * (1 - 0.35 * topness[:, None]) + pal['back'] * 0.35 * topness[:, None]
         tcol = tcol * (1 - tip[:, None]) + pal['white'] * tip[:, None]
-        tfur = furL * (1.6 + 1.2 * np.sin(np.pi * np.clip(s_v, 0, 1)) ) * (1 - 0.6 * smoothstep(0.92, 1.0, s_v))
+        tfur = furL * (1.7 + 1.5 * np.sin(np.pi * np.clip(s_v, 0, 1)) ) * (1 - 0.6 * smoothstep(0.92, 1.0, s_v))
         parts.append(Part("Tail" + t['prefix'], tv, tf, tcol, tfur, Wt, furmat, uv_density=55 / sc))
 
     # ---- ears
@@ -546,7 +551,7 @@ def build_stage(S, out_dir):
                 a = i * nu + j; b = i * nu + (j + 1) % nu; c = (i + 1) * nu + (j + 1) % nu; d_ = (i + 1) * nu + j
                 faces += [(a, d_, c), (a, c, b)]
         ang = T.reshape(-1)
-        iris_a, pupil_a = 1.30, 0.58
+        iris_a, pupil_a = 1.12, 0.50
         t_ir = np.clip((ang - pupil_a) / (iris_a - pupil_a), 0, 1)
         ecol = np.tile(pal['sclera'], (len(verts), 1))
         irc = pal['iris_in'][None] * (1 - t_ir[:, None]) + pal['iris_out'][None] * t_ir[:, None]
@@ -554,6 +559,8 @@ def build_stage(S, out_dir):
         lim = smoothstep(iris_a - 0.12, iris_a - 0.02, ang) * (ang < iris_a)
         ecol = ecol * (1 - lim[:, None]) + pal['limbal'] * lim[:, None]
         ecol = np.where((ang < pupil_a)[:, None], pal['pupil'][None], ecol)
+        lower = np.clip(-(loc @ np.array([0, 1.0, 0])), 0, 1) * (ang < iris_a) * (ang > pupil_a)
+        ecol = ecol * (1 - 0.45 * lower[:, None]) + hexc('#FFC870') * 0.45 * lower[:, None]
         Wt = np.zeros((len(verts), nB)); Wt[:, bidx['Eye_' + e['side']]] = 1
         extra.append(Part("Eye_" + e['side'], verts, np.array(faces), ecol, np.zeros(len(verts)), Wt, eyemat))
         gth = np.linspace(0, math.pi, 9); gph = np.linspace(0, 2 * math.pi, 14, endpoint=False)
@@ -767,6 +774,38 @@ def finish_front_feet(arm, p, G, lift_extra=None):
 
 def clean(p): return {k: v for k, v in p.items() if not k.startswith('_')}
 
+
+def lerp_pose(a, b, w):
+    """Blend two poses (w=0 → a, w=1 → b)."""
+    out = Pose()
+    for k in set(a) | set(b):
+        if k.startswith('_'): continue
+        ea, eb = a.get(k, {}), b.get(k, {})
+        e = {}
+        for f, zero in (('r', (0, 0, 0)), ('l', (0, 0, 0)), ('s', (1, 1, 1))):
+            if f in ea or f in eb:
+                va, vb = ea.get(f, zero), eb.get(f, zero)
+                e[f] = tuple(va[i] + (vb[i] - va[i]) * w for i in range(3))
+        if 'r_axis' in ea or 'r_axis' in eb:
+            ax = (ea.get('r_axis') or eb.get('r_axis'))[0]
+            da = ea['r_axis'][1] if 'r_axis' in ea else 0.0
+            db = eb['r_axis'][1] if 'r_axis' in eb else 0.0
+            e['r_axis'] = (ax, da + (db - da) * w)
+        out[k] = e
+    return out
+
+def set_lids(p, G, deg):
+    for e in G['eyes']: p['Lid_' + e['side']] = {'r_axis': (e['lid_axis'], e['lid_close_sign'] * deg)}
+    return p
+
+def mouth(p, k):
+    return p.s('Mouth', 1 + 4.5 * k, 1 + 2.5 * k, 1 + 5.5 * k)
+
+def bell(t, a, b):
+    """0 outside [a,b], smooth 0→1→0 inside."""
+    if t <= a or t >= b: return 0.0
+    return math.sin(math.pi * (t - a) / (b - a)) ** 2
+
 # --- clips -----------------------------------------------------------------
 def clip_defs(G):
     L, leg, R, sc = G['L'], G['leg'], G['R'], G['sc']
@@ -850,6 +889,7 @@ def clip_defs(G):
     def eat(t):
         p = Pose(); nib = abs(math.sin(2 * math.pi * 2 * t))
         p.r('Chest', rx=8); p.r('Neck', rx=34); p.r('Head', rx=12 + 7 * nib)
+        mouth(p, 0.4 * nib)
         for s in ('L', 'R'): p.l('IK_Front_' + s, y=-leg * 0.08)
         p.r('Ear_L', rx=10); p.r('Ear_R', rx=10)
         tail_pose(p, G, [(6, 0, 0)] * 4, wag=8 * wave(t))
@@ -878,6 +918,147 @@ def clip_defs(G):
         k = abs(math.sin(2 * math.pi * t))
         return Pose().s('Mouth', 1 + 4.5 * k, 1 + 2.5 * k, 1 + 5.5 * k)
 
+
+    # ---------------- extra clips (behaviour set) ----------------
+    def sniff(t):
+        p = Pose(); nod = math.sin(2 * math.pi * 4 * t)
+        p.r('Chest', rx=6); p.r('Neck', rx=26); p.r('Head', rx=16 + 3 * nod, rz=10 * math.sin(2 * math.pi * t))
+        p.r('Ear_L', rx=12); p.r('Ear_R', rx=12)
+        tail_pose(p, G, [(8, 0, 0)] * 4, wag=6 * wave(t))
+        return p
+    def lick(t):
+        p = sit(G); k = bell(t, 0.1, 0.45) + bell(t, 0.5, 0.85)
+        mouth(p, 0.45 * k); p.r('Head', rx=-6, rz=6 * k)
+        set_lids(p, G, 35 * k)
+        return p
+    def yawn(t):
+        p = sit(G); k = bell(t, 0.12, 0.8)
+        p.r('Neck', rx=-4 * k); p.r('Head', rx=-12 * k)
+        mouth(p, 1.25 * k); set_lids(p, G, 75 * k)
+        p.r('Ear_L', rx=-28 * k, ry=-10 * k); p.r('Ear_R', rx=-28 * k, ry=10 * k)
+        p.r('Chest', rx=-4 * k)
+        return p
+    def wakeup(t):
+        a = sleep(0.0)
+        if t < 0.45:
+            u = t / 0.45
+            p = Pose(a)
+            p.r('Neck', rx=-26 * ease(u)); p.r('Head', rx=-14 * ease(u), rz=-8 * ease(u))
+            k = bell(u, 0.35, 1.0)
+            mouth(p, 1.1 * k)
+            set_lids(p, G, 84 * (1 - ease(min(1, u * 1.4))) + 40 * k)
+            return p
+        u = ease((t - 0.45) / 0.55)
+        b = Pose()
+        p = lerp_pose(set_lids(Pose(a), G, 0).r('Neck', rx=-26).r('Head', rx=-14, rz=-8), b, u)
+        p.r('Ear_L', rx=10 * u); p.r('Ear_R', rx=10 * u)
+        return p
+    def drink(t):
+        p = Pose(); lap = abs(math.sin(2 * math.pi * 3 * t))
+        p.r('Chest', rx=10); p.r('Neck', rx=40); p.r('Head', rx=18 + 4 * lap)
+        mouth(p, 0.35 * lap)
+        for s in ('L', 'R'): p.l('IK_Front_' + s, y=-leg * 0.08)
+        p.r('Ear_L', rx=6); p.r('Ear_R', rx=6)
+        tail_pose(p, G, [(4, 0, 0)] * 4, wag=5 * wave(t))
+        return p
+    def groom(t):
+        p = sit(G); rub = math.sin(2 * math.pi * 2 * t)
+        p.l('IK_Front_L', y=-leg * 0.30, z=leg * 0.62 + 0.03 * sc * rub, x=-R * 0.15)
+        p.r('IK_Front_L', rx=-70)
+        p.r('Neck', rx=10); p.r('Head', rx=18 + 5 * rub, rz=18, ry=-10)
+        set_lids(p, G, 70); mouth(p, 0.25 * max(0, rub))
+        p.r('Ear_L', rx=-10); p.r('Ear_R', rx=-10)
+        return p
+    def scratch(t):
+        p = sit(G); sh = math.sin(2 * math.pi * 5 * t)
+        p.l('IK_Back_L', x=R * 0.35, y=-leg * 0.55, z=leg * 0.75 + 0.025 * sc * sh)
+        p.r('IK_Back_L', rx=-40)
+        p.r('Pelvis', ry=-8); p.r('Neck', ry=14, rz=10); p.r('Head', ry=18, rx=8)
+        p.r('Ear_L', rx=-20 + 6 * sh); set_lids(p, G, 60)
+        for ch in G['tails']:
+            for i, bn in enumerate(ch): p.r(bn, rz=6 * wave(t * 2, 0.1 * i))
+        return p
+    def tailchase(t):
+        p = walk((t * 2) % 1.0)
+        p.r('Root', rz=-360 * t)
+        p.r('Spine', rz=-14); p.r('Chest', rz=-14); p.r('Neck', rz=-30); p.r('Head', rz=-22, rx=8)
+        p.r('Ear_L', rx=14); p.r('Ear_R', rx=14)
+        for ch in G['tails']:
+            for i, bn in enumerate(ch): p.r(bn, rz=22, rx=6)
+        return p
+    def spin(t):
+        p = sit(G) if False else Pose(); u = ease(min(1, t / 0.8))
+        p.r('Root', rz=360 * u); p.l('Root', z=leg * 0.25 * math.sin(math.pi * min(1, t / 0.8)))
+        f = walk((t * 3) % 1.0)
+        for k_, e in f.items():
+            if k_.startswith('IK_'): p[k_] = e
+        p.r('Head', rx=-10); p.r('Ear_L', rx=16); p.r('Ear_R', rx=16)
+        for ch in G['tails']:
+            for i, bn in enumerate(ch): p.r(bn, rz=-25 * math.sin(math.pi * u), rx=18)
+        return p
+    def scared(t):
+        p = Pose(); tr = math.sin(2 * math.pi * 6 * t)
+        p.l('Root', z=-leg * 0.28); p.r('Pelvis', rx=8)
+        p.r('Spine', rz=1.2 * tr); p.r('Neck', rx=14); p.r('Head', rx=6, rz=2 * tr)
+        p.r('Ear_L', rx=-50, ry=24); p.r('Ear_R', rx=-50, ry=-24)
+        tail_pose(p, G, [(-45, 0, 0), (-20, 0, 0), (-10, 0, 0), (-5, 0, 0)])
+        return p
+    def sad(t):
+        p = sit(G); b = wave(t)
+        p.r('Neck', rx=24); p.r('Head', rx=14 + 2 * b, ry=6)
+        p.r('Ear_L', rx=-32, ry=26); p.r('Ear_R', rx=-32, ry=-26)
+        set_lids(p, G, 46 + 6 * b)
+        p.s('Chest', 1 + 0.02 * b, 1, 1 + 0.02 * b)
+        return p
+    def curious(t):
+        p = sit(G); a = bell(t, 0.05, 0.5) - bell(t, 0.5, 0.95)
+        p.r('Neck', rx=-8); p.r('Head', ry=24 * a, rx=-6)
+        p.r('Ear_L', rx=20 * max(0, a) + 6); p.r('Ear_R', rx=20 * max(0, -a) + 6)
+        for ch in G['tails']:
+            for i, bn in enumerate(ch): p.r(bn, rz=8 * wave(t * 2, 0.1 * i))
+        return p
+    def greet(t):
+        p = Pose(); hop = abs(math.sin(2 * math.pi * 2 * t)) * bell(t, 0.0, 1.0)
+        p.l('Root', z=leg * 0.16 * hop)
+        for s in ('L', 'R'): p.l('IK_Front_' + s, z=leg * 0.2 * hop); p.r('IK_Front_' + s, rx=30 * hop)
+        p.r('Pelvis', rx=-8 * hop); p.r('Head', rx=-16, rz=8 * math.sin(2 * math.pi * 2 * t))
+        p.r('Ear_L', rx=16); p.r('Ear_R', rx=16)
+        for ch in G['tails']:
+            for i, bn in enumerate(ch): p.r(bn, rz=30 * math.sin(2 * math.pi * 4 * t + i * 0.6), rx=20)
+        return p
+    def play(t):
+        if t < 0.45:
+            k = ease(t / 0.2) if t < 0.2 else 1.0
+            p = Pose()
+            p.l('Root', z=-leg * 0.10 * k); p.r('Pelvis', rx=24 * k); p.r('Neck', rx=-26 * k); p.r('Head', rx=-12 * k)
+            for s in ('L', 'R'): p.l('IK_Front_' + s, y=-leg * 0.5 * k)
+            for ch in G['tails']:
+                for i, bn in enumerate(ch): p.r(bn, rx=30 * k, rz=26 * math.sin(2 * math.pi * 5 * t + i * 0.5))
+            return p
+        u = (t - 0.45) / 0.55
+        p = jump(0.25 + 0.75 * u)
+        p.r('Pelvis', rx=24 * (1 - ease(min(1, u * 3))))
+        return p
+    def forage(t):
+        p = walk(t)
+        for k_ in [k for k in p if k.startswith('IK_')]:
+            e = p[k_]; l = e.get('l', (0, 0, 0)); e['l'] = (l[0], l[1] * 0.55, l[2] * 0.6)
+        p.r('Neck', rx=30); p.r('Head', rx=18 + 4 * math.sin(2 * math.pi * 4 * t), rz=8 * wave(t))
+        p.r('Ear_L', rx=14); p.r('Ear_R', rx=14)
+        return p
+    def rest(t):
+        p = lie(G); b = wave(t)
+        p.r('Neck', rx=-6, rz=12 * math.sin(2 * math.pi * t)); p.r('Head', rx=4, rz=8 * math.sin(2 * math.pi * t + 0.4))
+        tail_pose(p, G, [(-30, 0, -30), (-4, 0, -40), (0, 0, -42), (0, 0, -38 + 6 * b)])
+        p.s('Spine', 1 + 0.02 * b, 1, 1 + 0.02 * b)
+        ear = max(0, math.sin(2 * math.pi * (t * 2 - 0.3))) ** 8; p.r('Ear_L', rx=-12 * ear)
+        return p
+    def lookaround(t):
+        p = sit(G); a = bell(t, 0.05, 0.45) - bell(t, 0.5, 0.92)
+        p.r('Neck', rz=28 * a); p.r('Head', rz=22 * a, rx=-4)
+        p.r('Ear_L', rx=10 * a); p.r('Ear_R', rx=-10 * a)
+        return p
+
     base_ex = {'Mouth', 'Eye_L', 'Eye_R', 'Lid_L', 'Lid_R'}
     lids = {'Lid_L', 'Lid_R'}
     return [  # name, frames, func, loop, bone filter (None = all except base_ex)
@@ -889,11 +1070,28 @@ def clip_defs(G):
         ("Sleep", 96, sleep, True, lids),
         ("React", 26, react, False, None),
         ("Happy", 48, happy, True, lids),
-        ("Eat", 24, eat, True, None),
+        ("Eat", 24, eat, True, {'Mouth'}),
         ("Stretch", 48, stretch, False, None),
         ("Wag", 24, wagc, True, None),
         ("Blink", 6, blink, False, 'ONLY_LIDS'),
         ("Talk", 12, talk, True, 'ONLY_MOUTH'),
+        ("Sniff", 24, sniff, True, None),
+        ("Lick", 30, lick, False, {'Lid_L', 'Lid_R', 'Mouth'}),
+        ("Yawn", 48, yawn, False, {'Lid_L', 'Lid_R', 'Mouth'}),
+        ("WakeUp", 72, wakeup, False, {'Lid_L', 'Lid_R', 'Mouth'}),
+        ("Drink", 24, drink, True, {'Mouth'}),
+        ("Groom", 48, groom, True, {'Lid_L', 'Lid_R', 'Mouth'}),
+        ("ScratchEar", 48, scratch, True, lids),
+        ("TailChase", 36, tailchase, True, None),
+        ("Spin", 30, spin, False, None),
+        ("Scared", 24, scared, True, None),
+        ("Sad", 96, sad, True, lids),
+        ("Curious", 40, curious, False, None),
+        ("Greet", 48, greet, False, None),
+        ("Play", 48, play, False, None),
+        ("Forage", 36, forage, True, None),
+        ("Rest", 96, rest, True, None),
+        ("LookAround", 72, lookaround, False, None),
     ], base_ex
 
 def add_ik(arm):

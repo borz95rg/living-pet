@@ -147,6 +147,13 @@ class FoxPet3DView(
         js("Overlay.drag($dx)")
     }
 
+    /** Per-move window displacement in px: tail and ears swing with inertia. */
+    fun nudge(dx: Int, dy: Int) {
+        if (dx != 0 || dy != 0) js("Overlay.nudge($dx, $dy)")
+    }
+
+    fun dragEnd() = js("Overlay.dragEnd()")
+
     fun reactAt(viewX: Float, viewY: Float) {
         fallback.reactAt(viewX, viewY)
         js("Overlay.react($viewX, $viewY)")

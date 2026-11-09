@@ -83,7 +83,10 @@ class PetOverlayService : Service() {
                 }
                 if (wanderUntil == 0L && now - lastIdleActionAt > 45_000L && kotlin.random.Random.nextInt(6) == 0) {
                     lastIdleActionAt = now
-                    petView.playAction(listOf("Stretch", "React", "Jump")[kotlin.random.Random.nextInt(3)], 1_500L)
+                    val evening = hour >= 20 || hour < 8
+                    val flourishes = listOf("Stretch", "LookAround", "LookAround", "Curious", "ScratchEar", "Groom",
+                        "Lick", "TailChase", "Spin", "Jump", "Sniff") + if (evening) listOf("Yawn", "Yawn") else emptyList()
+                    petView.playAction(flourishes[kotlin.random.Random.nextInt(flourishes.size)], 1_500L)
                 }
                 if (wanderUntil == 0L && now - lastTouchAt > 8 * 60_000L && now - lastWanderAt > 6 * 60_000L) {
                     running = kotlin.random.Random.nextInt(4) == 0
@@ -203,8 +206,11 @@ class PetOverlayService : Service() {
                 if (abs(dx) + abs(dy) > 8 * density) dragging = true
                 if (dragging) {
                     val bounds = screenBounds()
+                    val oldX = params.x
+                    val oldY = params.y
                     params.x = (startX + dx).coerceIn(0, (bounds.width() - params.width).coerceAtLeast(0))
                     params.y = (startY + dy).coerceIn(0, (bounds.height() - params.height).coerceAtLeast(0))
+                    petView.nudge(params.x - oldX, params.y - oldY)
                     petView.onDragged(dx)
                     runCatching { windowManager.updateViewLayout(petView, params) }
                 }
@@ -212,6 +218,7 @@ class PetOverlayService : Service() {
             }
             MotionEvent.ACTION_UP -> {
                 if (dragging) {
+                    petView.dragEnd()
                     save.edit().putInt("overlay_x", params.x).putInt("overlay_y", params.y).apply()
                 } else if (System.currentTimeMillis() - downAt > 650L) {
                     startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
