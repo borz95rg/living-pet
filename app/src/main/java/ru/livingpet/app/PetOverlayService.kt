@@ -26,6 +26,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Calendar
 import java.util.Locale
 import kotlin.math.abs
 
@@ -44,6 +45,8 @@ class PetOverlayService : Service() {
     private var lastTouchAt = System.currentTimeMillis()
     private var lastWanderAt = System.currentTimeMillis()
     private var wanderUntil = 0L
+    private var sleeping = false
+    private var running = false
     private var direction = 1
     private var screenOn = true
     private var receiverRegistered = false
@@ -63,12 +66,29 @@ class PetOverlayService : Service() {
             if (!::petView.isInitialized) return
             val now = System.currentTimeMillis()
             if (screenOn && !dragging) {
+                val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+                val shouldSleep = hour >= 22 || hour < 7
+                if (shouldSleep != sleeping) {
+                    sleeping = shouldSleep
+                    petView.setSleeping(sleeping)
+                    if (sleeping) {
+                        wanderUntil = 0L
+                        petView.setWalking(false)
+                    }
+                }
+                if (sleeping) {
+                    handler.postDelayed(this, 30_000L)
+                    return
+                }
                 if (wanderUntil == 0L && now - lastTouchAt > 8 * 60_000L && now - lastWanderAt > 6 * 60_000L) {
-                    wanderUntil = now + 2_500L
+                    running = kotlin.random.Random.nextInt(4) == 0
+                    wanderUntil = now + if (running) 2_800L else 2_500L
                     petView.setWalking(true)
+                    if (running) petView.playAction("Run", 2_800L)
                 }
                 if (wanderUntil > 0L && now < wanderUntil) {
-                    val step = (4 * resources.displayMetrics.density).toInt().coerceAtLeast(1)
+                    val speedDp = if (running) 9 else 4
+                    val step = (speedDp * resources.displayMetrics.density).toInt().coerceAtLeast(1)
                     val maxX = (screenBounds().width() - params.width).coerceAtLeast(0)
                     params.x += direction * step
                     if (params.x <= 0) { params.x = 0; direction = 1 }
@@ -79,8 +99,9 @@ class PetOverlayService : Service() {
                     wanderUntil = 0L
                     lastWanderAt = now
                     petView.setWalking(false)
+                    if (kotlin.random.Random.nextInt(4) == 0) petView.playAction("Jump", 900L)
                 }
-                handler.postDelayed(this, 500L)
+                handler.postDelayed(this, if (sleeping) 30_000L else 500L)
             }
         }
     }
@@ -136,6 +157,9 @@ class PetOverlayService : Service() {
             setAnimationEnabled(screenOn)
             setTouchHandler { event -> handleTouch(event) }
         }
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        sleeping = hour >= 22 || hour < 7
+        petView.setSleeping(sleeping)
         params = WindowManager.LayoutParams(
             width, height,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,

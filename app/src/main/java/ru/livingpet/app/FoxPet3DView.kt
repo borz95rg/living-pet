@@ -24,6 +24,8 @@ class FoxPet3DView(
     private var touchHandler: ((MotionEvent) -> Boolean)? = null
     private var animationEnabled = true
     private var walking = false
+    private var sleeping = false
+    private var actionTask: Runnable? = null
     var faceRight: Boolean = true
         set(value) {
             field = value
@@ -57,7 +59,7 @@ class FoxPet3DView(
                     scene.addChildNode(node)
                     modelNode = node
                     fallback.visibility = View.GONE
-                    playClip(if (walking) "Walk" else "Idle", loop = true)
+                    playBaseAnimation()
                 }.onFailure {
                     // Keep the playable Canvas pet visible if a device cannot initialize Filament.
                     fallback.visibility = View.VISIBLE
@@ -73,7 +75,24 @@ class FoxPet3DView(
     fun setWalking(value: Boolean) {
         walking = value
         fallback.setWalking(value)
-        if (animationEnabled) playClip(if (value) "Walk" else "Idle", loop = true)
+        if (animationEnabled) playBaseAnimation()
+    }
+
+    fun setSleeping(value: Boolean) {
+        sleeping = value
+        walking = false
+        fallback.setWalking(false)
+        if (animationEnabled) playBaseAnimation()
+    }
+
+    /** Play a short authored action, then return to sleep, walk, or idle. */
+    fun playAction(clip: String, durationMs: Long) {
+        if (!animationEnabled || modelNode == null) return
+        actionTask?.let { removeCallbacks(it) }
+        playClip(clip, loop = false)
+        val task = Runnable { playBaseAnimation() }
+        actionTask = task
+        postDelayed(task, durationMs)
     }
 
     fun setAnimationEnabled(value: Boolean) {
@@ -82,7 +101,7 @@ class FoxPet3DView(
         if (isAttachedToWindow) {
             lifecycle.currentState = if (value) Lifecycle.State.RESUMED else Lifecycle.State.STARTED
         }
-        if (value) playClip(if (walking) "Walk" else "Idle", loop = true)
+        if (value) playBaseAnimation()
         else stopCurrentClip()
     }
 
@@ -108,6 +127,10 @@ class FoxPet3DView(
 
     private fun clipName(clip: String) = "Fox_${listOf("Baby", "Cub", "Teen", "Adult", "Legendary")[growthStage.coerceIn(0, 4)]}_$clip"
 
+    private fun playBaseAnimation() {
+        playClip(when { sleeping -> "Sleep"; walking -> "Walk"; else -> "Idle" }, loop = true)
+    }
+
     private var currentClip: String? = null
 
     private fun playClip(clip: String, loop: Boolean) {
@@ -123,12 +146,14 @@ class FoxPet3DView(
         currentClip = null
         reactionTask?.let { removeCallbacks(it) }
         reactionTask = null
+        actionTask?.let { removeCallbacks(it) }
+        actionTask = null
     }
 
     private fun playReaction() {
         if (!animationEnabled || modelNode == null) return
         playClip("React", loop = false)
-        val task = Runnable { playClip(if (walking) "Walk" else "Idle", loop = true) }
+        val task = Runnable { playBaseAnimation() }
         reactionTask = task
         postDelayed(task, 1100L)
     }
