@@ -225,6 +225,52 @@
     return list[0][1] > 0 ? `Привычка: ${list[0][0]}` : 'Пока только знакомится с миром';
   }
 
+  function chapterText() {
+    const { days, stage } = ageStage();
+    const counts = pet.routine;
+    const habits = [
+      ['исследовать новые места', counts.explore], ['играть вместе', counts.play],
+      ['разговаривать', counts.talk], ['самостоятельно открывать мир', counts.autonomous],
+      ['принимать ласку', counts.petting || 0],
+    ].sort((a, b) => b[1] - a[1]);
+    const bond = pet.needs.affection >= 70
+      ? 'Вы уже привыкли друг к другу, и питомец смело делится своими открытиями.'
+      : pet.needs.affection >= 30
+        ? 'Питомец начинает узнавать твои привычки и всё смелее подходит поближе.'
+        : 'Вы пока только знакомитесь, и каждое спокойное мгновение помогает ей освоиться.';
+    const openings = {
+      fox: `На ${days}-й день ${pet.name} заметила за окном едва различимый след и решила выяснить, куда он ведёт.`,
+      wolf: `На ${days}-й день ${pet.name} обошёл свой уголок и убедился, что здесь всё спокойно.`,
+      cat: `На ${days}-й день ${pet.name} выбрала самое уютное место и наблюдала, как меняется свет.`,
+      dog: `На ${days}-й день ${pet.name} первым услышал знакомые шаги и радостно побежал навстречу.`,
+    };
+    const recent = pet.memories[0]?.text;
+    const habit = habits[0][1] > 0 ? `Любимое занятие — ${habits[0][0]}.` : 'Пока питомец с любопытством пробует всё понемногу.';
+    const lastMoment = recent ? `А в последней записи осталось: «${recent}»` : 'Впереди у вас ещё много маленьких открытий.';
+    const stageLine = stage >= 4 ? 'Питомец стал легендой вашей долины.' : stage >= 3 ? 'Питомец уже вырос и увереннее выбирает свой путь.' : stage >= 2 ? 'Питомец подрос и всё чаще отправляется исследовать новое.' : stage >= 1 ? 'Питомец понемногу осваивается и становится смелее.' : 'Это только начало вашей общей истории.';
+    return `${openings[pet.kind]} ${stageLine} ${habit} ${bond} ${lastMoment}`;
+  }
+
+  function openJournal() {
+    if (!pet) { toast('Сначала выбери питомца'); return; }
+    const { days, stage } = ageStage();
+    $('journalTitle').textContent = `История ${pet.name}`;
+    $('chapterTitle').textContent = `Глава ${Math.max(1, Math.ceil(days / 3))} · ${stages[stage]}`;
+    $('chapterText').textContent = chapterText();
+    const list = $('journalList');
+    list.replaceChildren();
+    pet.memories.slice(0, 10).forEach(item => {
+      const row = document.createElement('li');
+      const date = document.createElement('time');
+      const text = document.createElement('span');
+      date.textContent = item.date;
+      text.textContent = item.text;
+      row.append(date, text);
+      list.append(row);
+    });
+    $('journalDialog').hidden = false;
+  }
+
   function show() {
     if (!pet) return;
     const { days, stage } = ageStage();
@@ -354,6 +400,7 @@
     pet.xp = Math.min(32, pet.xp + 1);
     pet.needs.mood = clamp(pet.needs.mood + 4);
     pet.needs.affection = clamp(pet.needs.affection + 4);
+    pet.routine.petting = (pet.routine.petting || 0) + 1;
     pet.lastInteractionAt = now();
     pet.bubble = ['мур-р…', 'приятно!', 'я тут!', 'ещё немножко?'][Math.floor(Math.random() * 4)];
     const line = pet.kind === 'cat' ? 'Я заметила твою руку. Можно ещё погладить.' : pet.kind === 'dog' ? 'Ура, ты меня погладил!' : 'Я чувствую твоё прикосновение. Хорошо, что ты рядом.';
@@ -397,11 +444,9 @@
     $('overlayBtn').textContent = enabled ? '🐾' : '＋';
     toast(enabled ? 'Питомец появился поверх экрана' : 'Плавающий режим выключен');
   };
-  $('journalBtn').onclick = () => {
-    if (!pet) { toast('Сначала выбери питомца'); return; }
-    const lines = pet.memories.slice(0, 8).map(item => `• ${item.date} — ${item.text}`).join('\n');
-    alert(`ИСТОРИЯ ${pet.name.toUpperCase()}\n${personality()}\n\n${lines || 'Тихий день. Новые истории появятся со временем.'}`);
-  };
+  $('journalBtn').onclick = openJournal;
+  $('journalClose').onclick = () => { $('journalDialog').hidden = true; };
+  $('journalDialog').onclick = event => { if (event.target === $('journalDialog')) $('journalDialog').hidden = true; };
 
   pet = read();
   if (pet) {
