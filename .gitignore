@@ -3,3 +3,6 @@ local.properties
 .idea/
 **/build/
 *.iml
+*.jks
+*.keystore
+living-pet-actions-secrets.txt
