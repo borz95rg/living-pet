@@ -8,7 +8,7 @@ const STAGE_SIZE = [0.70, 0.80, 0.90, 1.0, 1.06];       // relative on-screen si
 const FUR_PARTS = /^(Body|Tail|Ear_)/;
 
 // ---------------------------------------------------------------- fur texture
-function makeFurTexture(size = 256) {
+function makeFurTexture(size = 512) {
   // Fur in tufts: each clump is a cone of strands that share a height,
   // so the shells read as soft locks of fur rather than velvet.
   const data = new Uint8Array(size * size * 4);
@@ -77,10 +77,12 @@ function furMaterial(furTex, shell, opts) {
         if (uShell > 0.0) {
           if (vFurLen < 0.0015 || fs.a < uShell) discard;
         }
-        float ao = mix(0.55, 1.22, pow(uShell, 0.8));   // dark roots, sunlit tips
-        diffuseColor.rgb *= ao * mix(1.0, fs.r / 0.92, 0.6);`);
+        float ao = mix(0.48, 1.28, pow(uShell, 0.72));   // darker roots, softly lit fur tips
+        float strand = smoothstep(0.18, 0.92, fs.r);
+        float fineShade = mix(0.84, 1.12, strand);
+        diffuseColor.rgb *= ao * fineShade * mix(1.0, fs.r / 0.92, 0.42);`);
   };
-  m.customProgramCacheKey = () => 'fur-v1' + (opts.legendary ? 'L' : '');
+  m.customProgramCacheKey = () => 'fur-v2' + (opts.legendary ? 'L' : '');
   return m;
 }
 
@@ -106,8 +108,9 @@ function blobShadowTexture() {
 export class Fox3D {
   constructor(canvas, opts = {}) {
     this.canvas = canvas;
-    this.opts = Object.assign({ base: 'models/', shells: 20, quality: 'high', facing: -0.42, view: 'room', pixelRatio: 2 }, opts);
-    if (this.opts.quality === 'low') this.opts.shells = 11;
+    this.opts = Object.assign({ base: 'models/', shells: 28, quality: 'high', facing: -0.42, view: 'room', pixelRatio: 2 }, opts);
+    if (this.opts.quality === 'low') this.opts.shells = 12;
+    else if (this.opts.quality === 'medium') this.opts.shells = 20;
     const r = this.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, premultipliedAlpha: true, powerPreference: 'low-power' });
     r.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.opts.pixelRatio));
     r.outputColorSpace = THREE.SRGBColorSpace;
