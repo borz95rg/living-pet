@@ -22,7 +22,11 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.abs
 
 /** User-started animated fox overlay. Its idle loop pauses while the display is off. */
@@ -186,6 +190,7 @@ class PetOverlayService : Service() {
                     startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
                 } else {
                     petView.reactAt(event.x, event.y)
+                    recordPetTouch()
                 }
                 dragging = false
                 lastTouchAt = System.currentTimeMillis()
@@ -194,6 +199,43 @@ class PetOverlayService : Service() {
             MotionEvent.ACTION_CANCEL -> { dragging = false; return true }
         }
         return true
+    }
+
+    /** Persist overlay petting into the same versioned save used by the game screen. */
+    private fun recordPetTouch() {
+        val state = try { JSONObject(save.getString("state_v1", "") ?: "") } catch (_: Exception) { return }
+        if (state.optString("kind") != "fox") return
+        val time = System.currentTimeMillis()
+        val needs = state.optJSONObject("needs") ?: JSONObject().apply {
+            put("satiety", 90); put("water", 85); put("energy", 90)
+            put("mood", 80); put("health", 100); put("clean", 95); put("affection", 8)
+        }
+        needs.put("mood", (needs.optDouble("mood", 80.0) + 4.0).coerceAtMost(100.0))
+        needs.put("affection", (needs.optDouble("affection", 8.0) + 4.0).coerceAtMost(100.0))
+        state.put("needs", needs)
+        state.put("lastInteractionAt", time)
+        state.put("updatedAt", time)
+        state.put("version", 2)
+        state.put("lastLine", "Мне приятно, что ты меня погладил. Хорошо, что ты рядом!")
+        state.put("bubble", "приятно! 💛")
+
+        val routine = state.optJSONObject("routine") ?: JSONObject()
+        routine.put("petting", routine.optInt("petting", 0) + 1)
+        state.put("routine", routine)
+
+        val memories = JSONArray()
+        val date = SimpleDateFormat("dd.MM.yyyy", Locale("ru", "RU")).format(Date(time))
+        memories.put(JSONObject().put("date", date).put("text", "Ты погладил Искру. Она обрадовалась и запомнила этот момент."))
+        val previous = state.optJSONArray("memories")
+        if (previous != null) {
+            for (index in 0 until minOf(previous.length(), 39)) memories.put(previous.get(index))
+        }
+        state.put("memories", memories)
+
+        val touches = state.optInt("overlayPetting", 0) + 1
+        state.put("overlayPetting", touches)
+        if (touches % 8 == 0) state.put("xp", (state.optInt("xp", 0) + 1).coerceAtMost(32))
+        save.edit().putString("state_v1", state.toString()).apply()
     }
 
     @Suppress("DEPRECATION")
