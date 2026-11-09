@@ -53,4 +53,8 @@ android {
 dependencies {
     // View-based Filament renderer for transparent GLB overlays (Java 17 compatible).
     implementation("io.github.sceneview:sceneview:2.3.0")
+    // SceneView exposes these types in its Android View API; declare them explicitly.
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.activity:activity-ktx:1.9.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 }
