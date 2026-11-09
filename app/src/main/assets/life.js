@@ -2,7 +2,7 @@
   'use strict';
 
   const SAVE_KEY = 'livingPetSave';
-  const SAVE_VERSION = 4;
+  const SAVE_VERSION = 5;
   const MAX_OFFLINE_MS = 14 * 24 * 60 * 60 * 1000;
   const STEP_MS = 15 * 60 * 1000;
   const names = { fox: 'Искра', wolf: 'Туман', cat: 'Плюша', dog: 'Бублик' };
@@ -53,6 +53,24 @@
       ],
     },
   ];
+  const homeCatalog = {
+    bed: [
+      { id: 'leaf-bed', icon: '🧺', name: 'Лежанка из листьев', unlockXp: 0 },
+      { id: 'cloud-bed', icon: '🛏️', name: 'Мягкая облачная кроватка', unlockXp: 8 },
+      { id: 'moon-bed', icon: '🌙', name: 'Лунная кроватка', unlockXp: 24 },
+    ],
+    toy: [
+      { id: 'acorn-toy', icon: '🌰', name: 'Шуршащий жёлудь', unlockXp: 0 },
+      { id: 'bell-toy', icon: '🔔', name: 'Тихий колокольчик', unlockMystery: true },
+      { id: 'star-toy', icon: '⭐', name: 'Звёздная игрушка', unlockXp: 16 },
+    ],
+    ornament: [
+      { id: 'fern', icon: '🪴', name: 'Папоротник', unlockXp: 0 },
+      { id: 'map-frame', icon: '🗺️', name: 'Карта тайной долины', unlockMystery: true },
+      { id: 'lantern', icon: '🏮', name: 'Тёплый фонарь', unlockXp: 16 },
+    ],
+  };
+  const homeCategoryNames = { bed: 'Лежанка', toy: 'Игрушка', ornament: 'Украшение' };
   const $ = id => document.getElementById(id);
   const now = () => Date.now();
   let pet;
@@ -70,6 +88,7 @@
       routine: { play: 0, talk: 0, explore: 0, feed: 0, autonomous: 0, sleep: 0 },
       discoveries: [], mysterySolved: false,
       expeditionIndex: 0, pendingExpedition: false, expeditionLog: [], souvenirs: [],
+      home: { bed: 'leaf-bed', toy: 'acorn-toy', ornament: 'fern' },
       activity: 'idle', lastActivityAt: time, lastInteractionAt: time,
       lastSimAt: time, nextActionAt: time + 25 * 60 * 1000,
     };
@@ -100,6 +119,10 @@
       ? data.expeditionLog.filter(entry => entry && typeof entry === 'object').slice(0, 20)
       : [];
     data.souvenirs = Array.isArray(data.souvenirs) ? [...new Set(data.souvenirs.filter(item => typeof item === 'string'))].slice(0, 20) : [];
+    data.home = { ...defaults.home, ...(data.home || {}) };
+    Object.keys(homeCatalog).forEach(category => {
+      if (!homeCatalog[category].some(item => item.id === data.home[category])) data.home[category] = defaults.home[category];
+    });
     data.activity = activityNames[data.activity] ? data.activity : 'idle';
     data.lastActivityAt = Number(data.lastActivityAt) || Number(data.updatedAt) || data.bornAt;
     data.lastInteractionAt = Number(data.lastInteractionAt) || data.bornAt;
@@ -115,7 +138,7 @@
       if (!raw) raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return null;
       const data = JSON.parse(raw);
-      if ([1, 2, 3, SAVE_VERSION].includes(data.version)) return migrate(data);
+      if ([1, 2, 3, 4, SAVE_VERSION].includes(data.version)) return migrate(data);
     } catch (_) { /* A damaged save never prevents starting a new game. */ }
     return null;
   }
@@ -318,6 +341,65 @@
     $('expeditionDialog').hidden = false;
   }
 
+  function isHomeItemUnlocked(item) {
+    return pet.xp >= (item.unlockXp || 0) && (!item.unlockMystery || pet.mysterySolved);
+  }
+
+  function renderRoom() {
+    for (const category of Object.keys(homeCatalog)) {
+      const item = homeCatalog[category].find(option => option.id === pet.home[category]);
+      const target = category === 'bed' ? 'roomBed' : category === 'toy' ? 'roomToy' : 'roomOrnament';
+      $(target).textContent = item.icon;
+      $(target).title = item.name;
+    }
+  }
+
+  function renderHomeOptions() {
+    const container = $('homeOptions');
+    container.replaceChildren();
+    Object.entries(homeCatalog).forEach(([category, items]) => {
+      const heading = document.createElement('h3');
+      heading.className = 'homegroup';
+      heading.textContent = homeCategoryNames[category];
+      container.append(heading);
+      const grid = document.createElement('div');
+      grid.className = 'homechoices';
+      items.forEach(item => {
+        const button = document.createElement('button');
+        button.className = 'homechoice';
+        button.disabled = !isHomeItemUnlocked(item);
+        if (pet.home[category] === item.id) button.classList.add('selected');
+        const icon = document.createElement('span');
+        icon.textContent = item.icon;
+        const name = document.createElement('span');
+        name.textContent = item.name;
+        const status = document.createElement('small');
+        status.textContent = !isHomeItemUnlocked(item)
+          ? (item.unlockMystery ? 'Откроется после тайны долины' : `Откроется при росте · ${item.unlockXp} опыта`)
+          : pet.home[category] === item.id ? 'Сейчас в комнате' : 'Поставить в комнату';
+        button.append(icon, name, status);
+        button.onclick = () => chooseHomeItem(category, item);
+        grid.append(button);
+      });
+      container.append(grid);
+    });
+  }
+
+  function openHome() {
+    if (!pet) { toast('Сначала выбери питомца'); return; }
+    renderHomeOptions();
+    $('homeDialog').hidden = false;
+  }
+
+  function chooseHomeItem(category, item) {
+    if (!isHomeItemUnlocked(item)) return;
+    pet.home[category] = item.id;
+    write();
+    renderRoom();
+    renderHomeOptions();
+    toast(`${item.name} теперь в доме`);
+  }
+
   function chooseExpedition(event, choice) {
     const time = now();
     if (choice.souvenir && !pet.souvenirs.includes(choice.souvenir)) pet.souvenirs.push(choice.souvenir);
@@ -415,6 +497,7 @@
     $('chat').textContent = pet.lastLine || welcome();
     $('bubble').textContent = pet.bubble || 'М-м? Кто здесь?';
     $('behavior').textContent = activityNames[pet.activity] || activityNames.idle;
+    renderRoom();
     setBar('satiety', pet.needs.satiety);
     setBar('water', pet.needs.water);
     setBar('energy', pet.needs.energy);
@@ -599,6 +682,9 @@
   $('journalDialog').onclick = event => { if (event.target === $('journalDialog')) $('journalDialog').hidden = true; };
   $('expeditionDialog').onclick = event => { if (event.target === $('expeditionDialog')) $('expeditionDialog').hidden = true; };
   $('expeditionLater').onclick = () => { $('expeditionDialog').hidden = true; };
+  $('homeBtn').onclick = openHome;
+  $('homeClose').onclick = () => { $('homeDialog').hidden = true; };
+  $('homeDialog').onclick = event => { if (event.target === $('homeDialog')) $('homeDialog').hidden = true; };
 
   pet = read();
   if (pet) {
